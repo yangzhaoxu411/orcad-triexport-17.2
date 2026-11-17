@@ -109,6 +109,8 @@ set callback [dict get $actions $run]
 check {$callback eq "::TriExport::openAction"} "menu child is wired to the open action"
 set result [$callback]
 check {$result eq "true" && [winfo exists .triExport.bottom.export]} "menu callback builds a complete dialog"
+check {[string match {Allegro Netlist*} [dict get $widgets .triExport.top.title options -text]]} "UI identifies Allegro output"
+check {[string match {*Unzip*Allegro*} [dict get $widgets .triExport.options.note options -text]]} "UI explains netlist ZIP extraction"
 check {$tkLoads == 1} "Tk loaded before window commands"
 check {[lsearch -exact $calls {wm withdraw .}] >= 0} "only newly loaded Tk root is hidden"
 set options [dict get $widgets .triExport.options.paper options]

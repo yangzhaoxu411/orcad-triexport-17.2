@@ -1,5 +1,14 @@
 # 更新记录
 
+## 1.0.0-rc7 — 2026-11-17
+
+- 网表改为 Allegro 原生格式，不再输出 PADS ASC。
+- 为保留三个交付文件的约定，将原生 `pstchip.dat`、`pstxprt.dat`、`pstxnet.dat` 按原始字节封装为一个 `_allegro.zip`，与 PDF、BOM CSV 一起输出；导入 Allegro 前先解压。
+- 删除 PADS 专属字符/长度限制和隐式电源重建逻辑。原生属性、POWER_GROUP、连接和编码不被转换，交由 Allegro 解释。
+- 保留 BOM 物理位号去重、PDF 选页、独立 DSN 副本及原文件版本保护，更新英文界面和导入说明。
+- 新增原生文件字节保持、ZIP 成员限制、编码/换行、完整作业与旧面板格式保护测试。
+- 必须重启 Capture 加载 rc7；旧版面板会明确提示重启，避免旧界面承诺与新网表格式不一致。
+
 ## 1.0.0-rc6 — 2026-11-17
 
 - 修复 Capture 17.2 的 `GetSelectedPMItems` 返回工程树路径时，被误传给 `DboBaseObjectToDboLib` 导致的类型错误。

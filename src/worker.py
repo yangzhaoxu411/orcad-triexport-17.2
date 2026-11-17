@@ -1,7 +1,7 @@
 """OrCAD 17.2 TriExport worker. No GUI automation or application injection.
 
 Capture creates PostScript and a job manifest. This separate process invokes
-Cadence's installed netlister, converts its flattened connectivity to PADS,
+Cadence's installed netlister, packages its native Allegro PST files unchanged,
 selects PDF pages, and commits exactly three files as one new directory.
 """
 from __future__ import annotations
@@ -20,13 +20,18 @@ import sys
 import tempfile
 import time
 import traceback
+import zipfile
 from dataclasses import dataclass
 import io
 
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "1.0.0-rc6"
-PADS_ATOM = re.compile(r"^[A-Za-z0-9_~!#$%+=|/.:;<>-]+$")
+VERSION = "1.0.0-rc7"
+ALLEGRO_FILES = {
+    "pstchip.dat": "LIBRARY_PARTS",
+    "pstxprt.dat": "EXPANDEDPARTLIST",
+    "pstxnet.dat": "EXPANDEDNETLIST",
+}
 
 
 class ExportError(Exception):
@@ -165,9 +170,9 @@ def parse_parts(tokens: list[Token]) -> dict:
     return parts
 
 
-def parse_nets(tokens: list[Token], parts: dict) -> dict[str, set[str]]:
-    nets: dict[str, set[str]] = {}
-    owners: dict[str, str] = {}
+def parse_nets(tokens: list[Token], parts: dict) -> dict[str, set[tuple[str, str]]]:
+    nets: dict[str, set[tuple[str, str]]] = {}
+    owners: dict[tuple[str, str], str] = {}
     name = None
     for i, tok in enumerate(tokens):
         if keyword(tok, "NET_NAME"):
@@ -183,9 +188,9 @@ def parse_nets(tokens: list[Token], parts: dict) -> dict[str, set[str]]:
             ref, pin = tokens[i + 1].value, tokens[i + 2].value
             if ref not in parts:
                 raise ExportError(f"Net {name} references unknown component {ref}.")
-            atom(ref, "Reference", 16)
-            atom(pin, f"pin number of {ref}")
-            node = ref + "." + pin
+            if not ref or not pin:
+                raise ExportError("NODE_NAME record has an empty reference or pin.")
+            node = (ref, pin)
             if node in owners and owners[node] != name:
                 raise ExportError(f"Pin {node} appears on both {owners[node]} and {name}.")
             owners[node] = name
@@ -193,88 +198,45 @@ def parse_nets(tokens: list[Token], parts: dict) -> dict[str, set[str]]:
     return nets
 
 
-def atom(value: str, kind: str, limit: int | None = None):
-    if not value or not PADS_ATOM.fullmatch(value) or (limit and len(value) > limit):
-        cap = f", maximum {limit} characters" if limit else ""
-        raise ExportError(f"Invalid PADS 2000/V3 {kind}{cap}: {value!r}. Fix the schematic; names are never silently changed.")
-
-
-def add_power_pins(nets: dict, parts: dict, primitives: dict):
-    """PST stores hidden package power pins in the primitive body.
-
-    Explicit flattened nodes take precedence over the package default. Power
-    groups requiring an unresolved remap fail closed rather than guessing.
-    """
-    owners = {node: name for name, nodes in nets.items() for node in nodes}
-    explicit = set(owners)
-    for ref, prim in parts.items():
-        if prim not in primitives:
-            raise ExportError(f"{ref} references missing primitive {prim}.")
-        props = primitives[prim]
-        for expression in props.get("POWER_PINS", []):
-            if not (expression.startswith("(") and expression.endswith(")")):
-                raise ExportError(f"Unsupported power pin syntax: {ref}: {expression}")
-            # Standard PST: '(VCC:14)' or '(VCC:14,28)'.
-            groups = re.split(r"\)\s*\(", expression[1:-1])
-            for group in groups:
-                if group.count(":") != 1:
-                    raise ExportError(f"Check the power pin mapping: {ref}: {expression}")
-                net, pins = group.split(":", 1)
-                net = net.strip()
-                atom(net, "power net name", 47)
-                for pin in pins.split(","):
-                    pin = pin.strip()
-                    atom(pin, f"power pin of {ref}")
-                    node = ref + "." + pin
-                    if node in explicit:
-                        continue
-                    if node in owners and owners[node] != net:
-                        raise ExportError(f"Conflicting implicit power nets for {node}.")
-                    if any(props.get("POWER_GROUP", [])):
-                        raise ExportError(f"{ref} has POWER_GROUP and unexpanded {node}; power connectivity cannot be inferred.")
-                    nets.setdefault(net, set()).add(node)
-                    owners[node] = net
-
-
 def natural(value: str):
     return [(1, int(p)) if p.isdigit() else (0, p.casefold()) for p in re.split(r"(\d+)", value)]
 
 
-def convert_pads(pst_dir: Path, output: Path) -> dict[str, str]:
-    primitives = parse_primitives(load_pst(pst_dir / "pstchip.dat", "LIBRARY_PARTS"))
-    part_tokens = load_pst(pst_dir / "pstxprt.dat", "EXPANDEDPARTLIST")
-    if any(keyword(t, "POWER_GROUP") for t in part_tokens):
-        raise ExportError("Parts contain POWER_GROUP remapping, which this version cannot infer.")
-    parts = parse_parts(part_tokens)
-    nets = parse_nets(load_pst(pst_dir / "pstxnet.dat", "EXPANDEDNETLIST"), parts)
-    add_power_pins(nets, parts, primitives)
+def package_allegro(pst_dir: Path, output: Path, log: Path | None = None) -> dict[str, str]:
+    """Package exactly the three Cadence-native files without rewriting bytes.
+
+    Read-only structural checks also supply the physical reference/footprint
+    map for BOM grouping. Native power, hierarchy, properties and encoding
+    remain Cadence's responsibility; no PADS naming rules or power expansion.
+    """
+    tokens = {name: load_pst(pst_dir / name, kind) for name, kind in ALLEGRO_FILES.items()}
+    primitives = parse_primitives(tokens["pstchip.dat"])
+    parts = parse_parts(tokens["pstxprt.dat"])
+    parse_nets(tokens["pstxnet.dat"], parts)
     footprints = {}
-    case_refs = set()
     for ref, primitive in parts.items():
-        atom(ref, "Reference", 16)
-        if ref.casefold() in case_refs:
-            raise ExportError(f"References differ only in case and conflict in PADS: {ref}")
-        case_refs.add(ref.casefold())
+        if primitive not in primitives:
+            raise ExportError(f"{ref} references missing primitive {primitive}.")
         footprint = primitives[primitive].get("JEDEC_TYPE", [""])[-1]
-        atom(footprint, f"PCB Footprint for {ref}")
+        if not footprint.strip():
+            raise ExportError(f"Missing PCB Footprint for {ref}. Fix the schematic.")
         footprints[ref] = footprint
-    seen_nets = set()
-    lines = ["!PADS-POWERPCB-V3.0-MILS!", "*PART*"]
-    lines += [f"{ref} {footprints[ref]}" for ref in sorted(parts, key=natural)]
-    lines.append("*NET*")
-    for net in sorted(nets, key=natural):
-        atom(net, "net name", 47)
-        if net.casefold() in seen_nets:
-            raise ExportError(f"Net names differ only in case and conflict in PADS: {net}")
-        seen_nets.add(net.casefold())
-        nodes = sorted(nets[net], key=natural)
-        if not nodes:
-            continue
-        lines.append("*SIGNAL* " + net)
-        for start in range(0, len(nodes), 5):
-            lines.append(" ".join(nodes[start:start + 5]))
-    lines.append("*END*")
-    output.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\r\n")
+    source_bytes = {name: (pst_dir / name).read_bytes() for name in ALLEGRO_FILES}
+    # Fixed timestamps give deterministic archives for identical native files.
+    with zipfile.ZipFile(output, "w") as archive:
+        for name, data in source_bytes.items():
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            archive.writestr(info, data)
+    with zipfile.ZipFile(output) as archive:
+        if archive.namelist() != list(ALLEGRO_FILES) or archive.testzip() is not None:
+            raise ExportError("Allegro netlist ZIP verification failed.")
+        if any(archive.read(name) != data for name, data in source_bytes.items()):
+            raise ExportError("Allegro netlist bytes changed during packaging.")
+    if log is not None:
+        with log.open("a", encoding="utf-8") as stream:
+            for name, data in source_bytes.items():
+                stream.write(f"Allegro native SHA256 {name}: {hashlib.sha256(data).hexdigest()}\n")
     return footprints
 
 
@@ -442,8 +404,8 @@ def safe_basename(name: str) -> str:
 
 
 def commit_three(files: list[Path], root: Path, stem: str, *, copier=shutil.copy2) -> Path:
-    if len(files) != 3 or {p.suffix for p in files} != {".asc", ".pdf", ".csv"}:
-        raise ExportError("Commit requires exactly three files: .asc, .pdf and .csv.")
+    if len(files) != 3 or {p.suffix for p in files} != {".zip", ".pdf", ".csv"}:
+        raise ExportError("Commit requires exactly three files: Allegro .zip, .pdf and .csv.")
     if any(not p.is_file() or p.stat().st_size == 0 for p in files):
         raise ExportError("An output file is missing or empty.")
     if not root.is_dir():
@@ -482,24 +444,27 @@ def status(job_dir: Path, text: str):
 
 
 def execute_job(job: dict, job_dir: Path) -> dict:
+    if job.get("netlist_format") != "allegro-pst":
+        raise ExportError("The open export panel is from an older version. Restart Capture to load the Allegro exporter.")
     log = job_dir / "diagnostic.log"
     status(job_dir, "1/4 Running the Cadence netlister...")
     with tempfile.TemporaryDirectory(prefix="TriExport-") as scratch:
         stage = Path(scratch)
         pst = native_netlist(job, stage, log)
         stem = safe_basename(Path(job["design"]).stem)
-        asc, pdf, bom = [stage / (stem + ext) for ext in (".asc", ".pdf", ".csv")]
-        status(job_dir, "2/4 Generating the PADS netlist and BOM...")
-        footprints = convert_pads(pst, asc)
+        netlist = stage / (stem + "_allegro.zip")
+        pdf, bom = [stage / (stem + ext) for ext in (".pdf", ".csv")]
+        status(job_dir, "2/4 Packaging the Allegro netlist and BOM...")
+        footprints = package_allegro(pst, netlist, log)
         count = write_bom(job["bom_rows"], footprints, bom)
         status(job_dir, "3/4 Converting PDF and extracting selected pages...")
         make_pdf(job, stage, pdf, log)
         if file_hash(Path(job["design"])) != job["design_hash"]:
             raise ExportError("The design was saved as a new revision during export. Export again.")
         status(job_dir, "4/4 Verifying and committing three files...")
-        output = commit_three([asc, pdf, bom], Path(job["root"]), stem)
+        output = commit_three([netlist, pdf, bom], Path(job["root"]), stem)
         return {"ok": True, "output": str(output), "pages": len(job["selected_pages"]), "parts": count,
-                "files": [str(output / p.name) for p in (asc, pdf, bom)]}
+                "files": [str(output / p.name) for p in (netlist, pdf, bom)]}
 
 
 def main(argv=None) -> int:

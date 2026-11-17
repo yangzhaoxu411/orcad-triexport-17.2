@@ -1,7 +1,7 @@
 # OrCAD Capture 17.2 TriExport. ASCII UI; user data remains UTF-8.
 # Entry points use the documented Capture Tcl API; no window automation.
 namespace eval ::TriExport {
-    variable version "1.0.0-rc6"
+    variable version "1.0.0-rc7"
     variable home [file dirname [file normalize [info script]]]
     variable cadenceRoot ""
     variable registered 0
@@ -570,7 +570,7 @@ proc ::TriExport::buildDialog {} {
     wm protocol $win WM_DELETE_WINDOW ::TriExport::closeWindow
     ttk::frame $win.top -padding 14
     pack $win.top -side top -fill x
-    ttk::label $win.top.title -text "PADS Netlist  /  Schematic PDF  /  BOM" -font {"Segoe UI" 14 bold}
+    ttk::label $win.top.title -text "Allegro Netlist  /  Schematic PDF  /  BOM" -font {"Segoe UI" 14 bold}
     ttk::label $win.top.design -textvariable ::TriExport::designPath -wraplength 690
     pack $win.top.title $win.top.design -anchor w -pady 4
     ttk::frame $win.location -padding {14 0 14 8}
@@ -618,7 +618,7 @@ proc ::TriExport::buildDialog {} {
     grid $win.options.driver -row 1 -column 1 -sticky ew -pady 8
     grid $win.options.paper -row 1 -column 2 -padx {8 0}
     grid columnconfigure $win.options 1 -weight 1
-    ttk::label $win.options.note -text "Page selection applies to PDF only. Netlist and BOM cover the full design. Each export creates a new folder containing exactly three files." -wraplength 690
+    ttk::label $win.options.note -text "Output: Allegro netlist ZIP, PDF and BOM CSV. Unzip the netlist before importing into Allegro. Page selection applies to PDF only." -wraplength 690
     grid $win.options.note -row 2 -column 0 -columnspan 3 -sticky w
     ttk::frame $win.bottom -padding {14 0 14 14}
     pack $win.bottom -fill x
@@ -695,7 +695,7 @@ proc ::TriExport::prepareJob {} {
     set ps [renderPostscript [file join $jobDir spool] $path]
     assertSaved $d
     set scalars [dict create design $path design_hash $hash cadence_root $cadenceRoot \
-        root [file normalize $root] ghostscript [file normalize $ghostscript] postscript $ps]
+        root [file normalize $root] ghostscript [file normalize $ghostscript] postscript $ps netlist_format allegro-pst]
     set manifest [file join $jobDir job.json]
     writeUtf8 $manifest [jobJson $scalars $selected $printedPages $bom]
     variable workerChannel

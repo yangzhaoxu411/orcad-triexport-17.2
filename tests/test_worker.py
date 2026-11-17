@@ -7,6 +7,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 
 from pypdf import PdfReader, PdfWriter
@@ -58,57 +59,86 @@ class WorkspaceCase(unittest.TestCase):
         return self.dir
 
 
-class PadsTests(WorkspaceCase):
-    def test_full_connectivity_and_hidden_power(self):
-        footprints = w.convert_pads(self.fixtures(), self.dir / "demo.asc")
+class AllegroTests(WorkspaceCase):
+    def test_native_files_preserved_byte_for_byte(self):
+        self.fixtures()
+        (self.dir / "extra.log").write_text("must not ship")
+        before = {name: (self.dir / name).read_bytes() for name in w.ALLEGRO_FILES}
+        output = self.dir / "demo_allegro.zip"
+        footprints = w.package_allegro(self.dir, output, self.dir / "diagnostic.log")
         self.assertEqual(footprints, {"U1": "DIP14", "U2": "DIP14"})
-        text = (self.dir / "demo.asc").read_text()
-        self.assertEqual(text.count("U1.14"), 1)
-        self.assertIn("*SIGNAL* GND\nU1.7 U2.7", text)
-        self.assertIn("*SIGNAL* VCC\nU1.14 U2.14", text)
-        self.assertIn("*SIGNAL* DATA\nU1.1 U2.2", text)
-        self.assertTrue(text.startswith("!PADS-POWERPCB-V3.0-MILS!"))
-        self.assertTrue(text.endswith("*END*\n"))
+        with zipfile.ZipFile(output) as z:
+            self.assertEqual(z.namelist(), list(w.ALLEGRO_FILES))
+            self.assertIsNone(z.testzip())
+            for name, data in before.items():
+                self.assertEqual(z.read(name), data)
+        self.assertEqual(len(list(self.dir.glob("*.asc"))), 0)
 
-    def test_explicit_power_connection_wins(self):
-        nets = NETS.replace("NET_NAME 'VCC'", "NET_NAME '+3V3'")
-        w.convert_pads(self.fixtures(nets=nets), self.dir / "demo.asc")
-        text = (self.dir / "demo.asc").read_text()
-        self.assertIn("*SIGNAL* +3V3\nU1.14", text)
-        self.assertIn("*SIGNAL* VCC\nU2.14", text)
+    def test_native_power_group_is_preserved_without_inference(self):
+        chip = CHIP.replace("end_body;", "POWER_GROUP='GROUP1'; end_body;")
+        parts = PARTS.replace("SECTION='A'", "POWER_GROUP='SUPPLY1', SECTION='A'")
+        self.fixtures(chip=chip, parts=parts)
+        w.package_allegro(self.dir, self.dir / "native.zip")
+        with zipfile.ZipFile(self.dir / "native.zip") as z:
+            self.assertEqual(z.read("pstchip.dat"), (self.dir / "pstchip.dat").read_bytes())
+            self.assertEqual(z.read("pstxprt.dat"), (self.dir / "pstxprt.dat").read_bytes())
+            # Hidden power remains in the primitive, never synthesized as nodes.
+            self.assertEqual(z.read("pstxnet.dat"), (self.dir / "pstxnet.dat").read_bytes())
+
+    def test_pads_limits_are_not_applied(self):
+        self.fixtures(chip=CHIP.replace("DIP14", "QFN48? 6X6MM"),
+                      nets=NETS.replace("'DATA'", repr("DATA" * 20)))
+        w.package_allegro(self.dir, self.dir / "native.zip")
+        with zipfile.ZipFile(self.dir / "native.zip") as z:
+            self.assertIn(b"QFN48? 6X6MM", z.read("pstchip.dat"))
+            self.assertIn(("DATA" * 20).encode(), z.read("pstxnet.dat"))
+        # These are archive pass-through checks, not an Allegro library-validity claim.
+
+    def test_legacy_encoding_and_crlf_preserved(self):
+        self.fixtures()
+        data = CHIP.replace("DIP14", "封装").replace("\n", "\r\n").encode("gb18030")
+        (self.dir / "pstchip.dat").write_bytes(data)
+        w.package_allegro(self.dir, self.dir / "native.zip")
+        with zipfile.ZipFile(self.dir / "native.zip") as z:
+            self.assertEqual(z.read("pstchip.dat"), data)
+
+    def test_long_reference_is_not_limited_to_pads(self):
+        ref = "U" + "1" * 30
+        self.fixtures(parts=PARTS.replace("U1", ref), nets=NETS.replace("U1", ref))
+        footprints = w.package_allegro(self.dir, self.dir / "native.zip")
+        self.assertIn(ref, footprints)
 
     def test_conflicting_pin_fails(self):
-        nets = NETS.replace("NODE_NAME U1 14", "NODE_NAME U1 1")
         with self.assertRaisesRegex(w.ExportError, "appears on both"):
-            w.convert_pads(self.fixtures(nets=nets), self.dir / "bad.asc")
+            w.package_allegro(self.fixtures(nets=NETS.replace("NODE_NAME U1 14", "NODE_NAME U1 1")), self.dir / "bad.zip")
 
     def test_truncated_input_fails(self):
         with self.assertRaisesRegex(w.ExportError, "END"):
-            w.convert_pads(self.fixtures(nets=NETS.replace("END.", "")), self.dir / "bad.asc")
+            w.package_allegro(self.fixtures(nets=NETS.replace("END.", "")), self.dir / "bad.zip")
+        self.assertFalse((self.dir / "bad.zip").exists())
+
+    def test_missing_or_empty_native_file_fails(self):
+        self.fixtures()
+        (self.dir / "pstxnet.dat").unlink()
+        with self.assertRaisesRegex(w.ExportError, "pstxnet.dat"):
+            w.package_allegro(self.dir, self.dir / "bad.zip")
+        (self.dir / "pstxnet.dat").touch()
+        with self.assertRaisesRegex(w.ExportError, "pstxnet.dat"):
+            w.package_allegro(self.dir, self.dir / "bad.zip")
+
+    def test_wrong_native_file_type_fails(self):
+        with self.assertRaisesRegex(w.ExportError, "FILE_TYPE"):
+            w.package_allegro(self.fixtures(nets=NETS.replace("EXPANDEDNETLIST", "OTHER")), self.dir / "bad.zip")
 
     def test_missing_footprint_fails(self):
         with self.assertRaisesRegex(w.ExportError, "PCB Footprint"):
-            w.convert_pads(self.fixtures(chip=CHIP.replace("JEDEC_TYPE='DIP14';", "")), self.dir / "bad.asc")
-
-    def test_unsupported_name_fails_without_renaming(self):
-        with self.assertRaisesRegex(w.ExportError, "Invalid PADS"):
-            w.convert_pads(self.fixtures(nets=NETS.replace("'DATA'", "'数据信号'")), self.dir / "bad.asc")
-
-    def test_net_length_and_case_conflicts(self):
-        for name in ("D" * 48, "vcc"):
-            with self.subTest(name=name), self.assertRaises(w.ExportError):
-                w.convert_pads(self.fixtures(nets=NETS.replace("'DATA'", repr(name))), self.dir / "bad.asc")
+            w.package_allegro(self.fixtures(chip=CHIP.replace("JEDEC_TYPE='DIP14';", "")), self.dir / "bad.zip")
 
     def test_unknown_part_and_primitive_fail(self):
         with self.assertRaisesRegex(w.ExportError, "unknown component"):
-            w.convert_pads(self.fixtures(nets=NETS.replace("U1 1", "U9 1")), self.dir / "bad.asc")
+            w.package_allegro(self.fixtures(nets=NETS.replace("U1 1", "U9 1")), self.dir / "bad.zip")
         with self.assertRaisesRegex(w.ExportError, "missing primitive"):
-            w.convert_pads(self.fixtures(parts=PARTS.replace("'DEVICE'", "'MISSING'")), self.dir / "bad.asc")
-
-    def test_power_group_not_guessed(self):
-        chip = CHIP.replace("end_body;", "POWER_GROUP='GROUP1'; end_body;")
-        with self.assertRaisesRegex(w.ExportError, "POWER_GROUP"):
-            w.convert_pads(self.fixtures(chip=chip), self.dir / "bad.asc")
+            w.package_allegro(self.fixtures(parts=PARTS.replace("'DEVICE'", "'MISSING'")), self.dir / "bad.zip")
 
     def test_lexer_quotes_and_literal_backslashes(self):
         tokens = w.lex_pst("{comment} X='C:\\new\\a'; Y='Bob''s';")
@@ -118,12 +148,29 @@ class PadsTests(WorkspaceCase):
             with self.assertRaises(w.ExportError):
                 w.lex_pst(text)
 
-    def test_multi_pin_power_expression(self):
-        chip = CHIP.replace("(VCC:14)", "(VCC:14,28)(AUX:30)")
-        w.convert_pads(self.fixtures(chip=chip), self.dir / "demo.asc")
-        text = (self.dir / "demo.asc").read_text()
-        self.assertIn("U1.28", text)
-        self.assertIn("*SIGNAL* AUX\nU1.30 U2.30", text)
+    def test_complete_job_commits_native_zip_pdf_and_csv(self):
+        self.fixtures()
+        root = self.dir / "output"
+        root.mkdir()
+        design = self.dir / "source.dsn"
+        design.write_bytes(b"saved design")
+        job = {"netlist_format": "allegro-pst", "design": str(design), "design_hash": w.file_hash(design), "root": str(root),
+               "bom_rows": [{"ref": "U1"}, {"ref": "U2"}],
+               "selected_pages": [{"schematic": "MAIN", "name": "PAGE1"}]}
+        def fake_pdf(job, stage, output, log):
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=400)
+            writer.write(output)
+            writer.close()
+        with patch.object(w, "native_netlist", return_value=self.dir), patch.object(w, "make_pdf", side_effect=fake_pdf):
+            result = w.execute_job(job, self.dir)
+        out = Path(result["output"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["parts"], 2)
+        self.assertEqual({p.name for p in out.iterdir()}, {"source_allegro.zip", "source.pdf", "source.csv"})
+        with zipfile.ZipFile(out / "source_allegro.zip") as z:
+            for name in w.ALLEGRO_FILES:
+                self.assertEqual(z.read(name), (self.dir / name).read_bytes())
 
 
 class BomTests(WorkspaceCase):
@@ -202,7 +249,7 @@ class PdfTests(WorkspaceCase):
 
 class CommitTests(WorkspaceCase):
     def files(self):
-        paths = [self.dir / ("设计" + ext) for ext in (".asc", ".pdf", ".csv")]
+        paths = [self.dir / ("设计" + ext) for ext in (".zip", ".pdf", ".csv")]
         for p in paths:
             p.write_bytes(b"test payload")
         return paths
@@ -216,7 +263,7 @@ class CommitTests(WorkspaceCase):
             first = w.commit_three(files, root, "设计")
             second = w.commit_three(files, root, "设计")
         self.assertNotEqual(first, second)
-        self.assertEqual({p.suffix for p in first.iterdir()}, {".asc", ".pdf", ".csv"})
+        self.assertEqual({p.suffix for p in first.iterdir()}, {".zip", ".pdf", ".csv"})
         self.assertEqual(len(list(first.iterdir())), 3)
         self.assertEqual((root / "existing.txt").read_text(), "keep")
 
@@ -251,6 +298,11 @@ class CommitTests(WorkspaceCase):
 
 
 class ProcessTests(WorkspaceCase):
+    def test_old_panel_cannot_silently_change_netlist_format(self):
+        with patch.object(w, "native_netlist") as native, self.assertRaisesRegex(w.ExportError, "Restart Capture"):
+            w.execute_job({}, self.dir)
+        native.assert_not_called()
+
     def native_fixture(self):
         root = self.dir / "cadence"
         (root / "tools/bin").mkdir(parents=True)

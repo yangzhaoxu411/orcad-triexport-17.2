@@ -1,6 +1,6 @@
 # 环境要求
 
-适用版本：OrCAD TriExport **1.0.0-rc6**。
+适用版本：OrCAD TriExport **1.0.0-rc7**。
 
 ## 运行安装包
 
@@ -18,7 +18,7 @@
 
 Ghostscript 官方下载：[ghostscript.com/releases/gsdnld.html](https://ghostscript.com/releases/gsdnld.html)。OrCAD、许可、打印驱动及 Ghostscript 均由使用者自行安装，不在本插件包中分发。
 
-导出过程在本机完成，不需要联网，不会上传工程资料。CSV 可由 Excel、LibreOffice 或其他支持 UTF-8 BOM 的工具打开；生成 CSV 不需要安装这些软件。导出 ASC 不需要 PADS，但实际导入需要目标 PADS 及匹配的封装库。
+导出过程在本机完成，不需要联网，不会上传工程资料。CSV 可由 Excel、LibreOffice 或其他支持 UTF-8 BOM 的工具打开；生成 CSV 不需要安装这些软件。导出 Allegro PST 网表不需要启动 PCB Editor；实际导入需要 Allegro PCB Editor 许可及匹配的封装库。网表 ZIP 必须先解压。
 
 ## 已实测的配置
 
@@ -32,16 +32,16 @@ Ghostscript 官方下载：[ghostscript.com/releases/gsdnld.html](https://ghosts
 | 打印驱动 | `OrCADPS_17.2` |
 | Ghostscript | 10.08.0，`gswin64c.exe` |
 | 图纸设置 | Original sheet size |
-| 验证结果 | 完整 31 页及非连续 2 页导出均成功，输出数量和内容核对通过 |
+| 验证结果 | rc6 在 Capture 中完整/选页导出成功；rc7 原生网表工具及编译程序后台验证通过（31 页与 2 页），未重新执行 Capture 窗口中的打印 |
 
 EXE 属性未提供更细的 Capture hotfix 编号，不据此推断具体 hotfix。Windows 10、其他驱动名称、A4/A3 强制纸张和其他 Ghostscript 版本尚未完成同等实机验证。
 
 ## 原理图数据要求
 
 - 导出前先保存 DSN；检测到未保存修改时停止，插件不会代替用户保存。
-- 每个物理元件须有合法、唯一的位号和 PCB Footprint。PADS 名称不能含不支持的字符；插件不会自动猜测封装或静默改名。
+- 每个物理元件须有合法、唯一的位号和 PCB Footprint。合法性由原生网表工具和目标 Allegro 封装库约束，插件不再使用 PADS 字符/长度限制，也不会自动猜测封装或静默改名。
 - PDF 只包含勾选页，网表和 BOM 对应完整根设计，不按 CIS 活动装配变体裁剪。
-- 无法确认的隐式电源映射、POWER_GROUP、外部 DSN 等特殊结构可能不支持；报错时不会提交半套结果。
+- 隐式电源、POWER_GROUP、层次和属性按原生 PST 保留，不在插件中重新解释或重建。外部 DSN、特殊层次结构和约束驱动流程未全面验证；报错时不会提交半套结果。
 - 导出期间不要保存新的设计版本；原文件版本变化时会停止提交。
 
 ## 从源码构建
