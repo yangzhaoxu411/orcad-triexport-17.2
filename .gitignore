@@ -1,0 +1,28 @@
+# Local build, diagnostics, credentials and release binaries
+.work/
+release/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.spec
+*.log
+.env
+.env.*
+
+# User CAD designs and generated exports are never source assets
+*.dsn
+*.DSN
+*.opj
+*.OPJ
+*.olb
+*.OLB
+*.brd
+*.BRD
+*.asc
+*.pdf
+*.csv
+*.ps
+*.zip
+settings.json
+install.json

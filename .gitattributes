@@ -1,0 +1,12 @@
+* text=auto
+*.py text eol=lf
+*.tcl text eol=lf
+*.md text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.txt text eol=lf
+*.zip binary
+*.exe binary
+*.dll binary
+# Preserve upstream license whitespace verbatim.
+licenses/** -whitespace
