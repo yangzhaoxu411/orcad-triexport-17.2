@@ -1,7 +1,7 @@
 """OrCAD 17.2 TriExport worker. No GUI automation or application injection.
 
 Capture creates PostScript and a job manifest. This separate process invokes
-Cadence's installed netlister, packages its native Allegro PST files unchanged,
+Cadence's installed netlister, exports the chosen Allegro ZIP or PADS ASC,
 selects PDF pages, and commits exactly three files as one new directory.
 """
 from __future__ import annotations
@@ -26,7 +26,9 @@ import io
 
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "1.0.0-rc7"
+VERSION = "1.0.0-rc8"
+NETLIST_FORMATS = {"allegro-pst": "_allegro.zip", "pads-v3": ".asc"}
+PADS_ATOM = re.compile(r"^[A-Za-z0-9_~!#$%+=|/.:;<>-]+$")
 ALLEGRO_FILES = {
     "pstchip.dat": "LIBRARY_PARTS",
     "pstxprt.dat": "EXPANDEDPARTLIST",
@@ -240,6 +242,92 @@ def package_allegro(pst_dir: Path, output: Path, log: Path | None = None) -> dic
     return footprints
 
 
+def atom(value: str, kind: str, limit: int | None = None):
+    if not value or not PADS_ATOM.fullmatch(value) or (limit and len(value) > limit):
+        cap = f", maximum {limit} characters" if limit else ""
+        raise ExportError(f"Invalid PADS 2000/V3 {kind}{cap}: {value!r}. Fix the schematic; names are never silently changed.")
+
+
+def add_power_pins(nets: dict, parts: dict, primitives: dict):
+    """PST stores hidden package power pins in the primitive body.
+
+    Explicit flattened nodes take precedence over the package default. Power
+    groups requiring an unresolved remap fail closed rather than guessing.
+    """
+    owners = {node: name for name, nodes in nets.items() for node in nodes}
+    explicit = set(owners)
+    for ref, prim in parts.items():
+        if prim not in primitives:
+            raise ExportError(f"{ref} references missing primitive {prim}.")
+        props = primitives[prim]
+        for expression in props.get("POWER_PINS", []):
+            if not (expression.startswith("(") and expression.endswith(")")):
+                raise ExportError(f"Unsupported power pin syntax: {ref}: {expression}")
+            # Standard PST: '(VCC:14)' or '(VCC:14,28)'.
+            groups = re.split(r"\)\s*\(", expression[1:-1])
+            for group in groups:
+                if group.count(":") != 1:
+                    raise ExportError(f"Check the power pin mapping: {ref}: {expression}")
+                net, pins = group.split(":", 1)
+                net = net.strip()
+                atom(net, "power net name", 47)
+                for pin in pins.split(","):
+                    pin = pin.strip()
+                    atom(pin, f"power pin of {ref}")
+                    node = (ref, pin)
+                    if node in explicit:
+                        continue
+                    if node in owners and owners[node] != net:
+                        raise ExportError(f"Conflicting implicit power nets for {node}.")
+                    if any(props.get("POWER_GROUP", [])):
+                        raise ExportError(f"{ref} has POWER_GROUP and unexpanded {node}; power connectivity cannot be inferred.")
+                    nets.setdefault(net, set()).add(node)
+                    owners[node] = net
+
+
+def convert_pads(pst_dir: Path, output: Path) -> dict[str, str]:
+    primitives = parse_primitives(load_pst(pst_dir / "pstchip.dat", "LIBRARY_PARTS"))
+    part_tokens = load_pst(pst_dir / "pstxprt.dat", "EXPANDEDPARTLIST")
+    if any(keyword(t, "POWER_GROUP") for t in part_tokens):
+        raise ExportError("Parts contain POWER_GROUP remapping, which this version cannot infer.")
+    parts = parse_parts(part_tokens)
+    nets = parse_nets(load_pst(pst_dir / "pstxnet.dat", "EXPANDEDNETLIST"), parts)
+    # Native tuple nodes remain unchanged in the Allegro path. Validate PADS
+    # identifiers before formatting its REF.PIN representation.
+    for nodes in nets.values():
+        for ref, pin in nodes:
+            atom(pin, f"pin number of {ref}")
+    add_power_pins(nets, parts, primitives)
+    footprints = {}
+    case_refs = set()
+    for ref, primitive in parts.items():
+        atom(ref, "Reference", 16)
+        if ref.casefold() in case_refs:
+            raise ExportError(f"References differ only in case and conflict in PADS: {ref}")
+        case_refs.add(ref.casefold())
+        footprint = primitives[primitive].get("JEDEC_TYPE", [""])[-1]
+        atom(footprint, f"PCB Footprint for {ref}")
+        footprints[ref] = footprint
+    seen_nets = set()
+    lines = ["!PADS-POWERPCB-V3.0-MILS!", "*PART*"]
+    lines += [f"{ref} {footprints[ref]}" for ref in sorted(parts, key=natural)]
+    lines.append("*NET*")
+    for net in sorted(nets, key=natural):
+        atom(net, "net name", 47)
+        if net.casefold() in seen_nets:
+            raise ExportError(f"Net names differ only in case and conflict in PADS: {net}")
+        seen_nets.add(net.casefold())
+        nodes = sorted((ref + "." + pin for ref, pin in nets[net]), key=natural)
+        if not nodes:
+            continue
+        lines.append("*SIGNAL* " + net)
+        for start in range(0, len(nodes), 5):
+            lines.append(" ".join(nodes[start:start + 5]))
+    lines.append("*END*")
+    output.write_text("\n".join(lines) + "\n", encoding="ascii", newline="\r\n")
+    return footprints
+
+
 def csv_safe(value: str) -> str:
     # Preserve values as text when a spreadsheet would treat them as formulas.
     return "'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value
@@ -404,8 +492,8 @@ def safe_basename(name: str) -> str:
 
 
 def commit_three(files: list[Path], root: Path, stem: str, *, copier=shutil.copy2) -> Path:
-    if len(files) != 3 or {p.suffix for p in files} != {".zip", ".pdf", ".csv"}:
-        raise ExportError("Commit requires exactly three files: Allegro .zip, .pdf and .csv.")
+    if len(files) != 3 or {p.suffix for p in files} not in ({".zip", ".pdf", ".csv"}, {".asc", ".pdf", ".csv"}):
+        raise ExportError("Commit requires exactly three files: one netlist (.zip or .asc), .pdf and .csv.")
     if any(not p.is_file() or p.stat().st_size == 0 for p in files):
         raise ExportError("An output file is missing or empty.")
     if not root.is_dir():
@@ -444,18 +532,27 @@ def status(job_dir: Path, text: str):
 
 
 def execute_job(job: dict, job_dir: Path) -> dict:
-    if job.get("netlist_format") != "allegro-pst":
-        raise ExportError("The open export panel is from an older version. Restart Capture to load the Allegro exporter.")
+    netlist_format = job.get("netlist_format")
+    if netlist_format is None:
+        raise ExportError("The open export panel is from an older version. Restart Capture to choose a netlist format.")
+    if not isinstance(netlist_format, str) or netlist_format not in NETLIST_FORMATS:
+        raise ExportError("Unsupported netlist format. Choose Allegro or PADS in the export panel.")
     log = job_dir / "diagnostic.log"
+    with log.open("a", encoding="utf-8") as stream:
+        stream.write(f"Requested netlist format: {netlist_format}\n")
     status(job_dir, "1/4 Running the Cadence netlister...")
     with tempfile.TemporaryDirectory(prefix="TriExport-") as scratch:
         stage = Path(scratch)
         pst = native_netlist(job, stage, log)
         stem = safe_basename(Path(job["design"]).stem)
-        netlist = stage / (stem + "_allegro.zip")
+        netlist = stage / (stem + NETLIST_FORMATS[netlist_format])
         pdf, bom = [stage / (stem + ext) for ext in (".pdf", ".csv")]
-        status(job_dir, "2/4 Packaging the Allegro netlist and BOM...")
-        footprints = package_allegro(pst, netlist, log)
+        if netlist_format == "allegro-pst":
+            status(job_dir, "2/4 Packaging the Allegro netlist and BOM...")
+            footprints = package_allegro(pst, netlist, log)
+        else:
+            status(job_dir, "2/4 Generating the PADS netlist and BOM...")
+            footprints = convert_pads(pst, netlist)
         count = write_bom(job["bom_rows"], footprints, bom)
         status(job_dir, "3/4 Converting PDF and extracting selected pages...")
         make_pdf(job, stage, pdf, log)
@@ -464,6 +561,7 @@ def execute_job(job: dict, job_dir: Path) -> dict:
         status(job_dir, "4/4 Verifying and committing three files...")
         output = commit_three([netlist, pdf, bom], Path(job["root"]), stem)
         return {"ok": True, "output": str(output), "pages": len(job["selected_pages"]), "parts": count,
+                "netlist_format": netlist_format,
                 "files": [str(output / p.name) for p in (netlist, pdf, bom)]}
 
 

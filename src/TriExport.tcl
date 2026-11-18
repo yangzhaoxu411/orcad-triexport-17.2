@@ -1,7 +1,7 @@
 # OrCAD Capture 17.2 TriExport. ASCII UI; user data remains UTF-8.
 # Entry points use the documented Capture Tcl API; no window automation.
 namespace eval ::TriExport {
-    variable version "1.0.0-rc7"
+    variable version "1.0.0-rc8"
     variable home [file dirname [file normalize [info script]]]
     variable cadenceRoot ""
     variable registered 0
@@ -14,6 +14,8 @@ namespace eval ::TriExport {
     variable ghostscript ""
     variable driver "OrCADPS_17.2"
     variable paper "Original sheet size"
+    variable netlistFormat "Allegro (ZIP)"
+    variable formatNote ""
     variable statusText "Choose an output folder and PDF pages."
     variable jobDir ""
     variable printedPages {}
@@ -72,11 +74,15 @@ proc ::TriExport::jobJson {scalars selected printed bom} {
     return "\{[join $fields ,]\}"
 }
 proc ::TriExport::loadSettings {} {
+    set ::TriExport::netlistFormat "Allegro (ZIP)"
     set path [file join [dataHome] settings.json]
     if {![file isfile $path]} { return }
     if {[catch {package require json; set data [::json::json2dict [readUtf8 $path]]}]} { return }
     foreach key {root ghostscript driver paper} {
         if {[dict exists $data $key]} { set ::TriExport::$key [dict get $data $key] }
+    }
+    if {[dict exists $data netlist_format] && [dict get $data netlist_format] eq "pads-v3"} {
+        set ::TriExport::netlistFormat "PADS PowerPCB V3 (ASC)"
     }
     # Migrate rc1 labels without retaining locale-dependent UI text.
     if {[string match {A4 *} $::TriExport::paper]} { set ::TriExport::paper "A4 landscape" }
@@ -89,9 +95,31 @@ proc ::TriExport::saveSettings {} {
     file mkdir [dataHome]
     set data {}
     foreach key {root ghostscript driver paper} { dict set data $key [set ::TriExport::$key] }
+    dict set data netlist_format [netlistFormatId]
     set path [file join [dataHome] settings.json]
     writeUtf8 "$path.tmp" [jsonObject $data]
     file rename -force "$path.tmp" $path
+}
+
+proc ::TriExport::netlistFormatId {} {
+    variable netlistFormat
+    switch -- $netlistFormat {
+        "Allegro (ZIP)" { return allegro-pst }
+        "PADS PowerPCB V3 (ASC)" { return pads-v3 }
+        default { error "Choose Allegro or PADS from Netlist format." }
+    }
+}
+proc ::TriExport::updateFormatNote {} {
+    variable formatNote
+    if {[netlistFormatId] eq "allegro-pst"} {
+        set formatNote "Output: Allegro netlist ZIP, PDF and BOM CSV. Unzip the netlist before importing into Allegro. Page selection applies to PDF only."
+    } else {
+        set formatNote "Output: PADS PowerPCB V3 ASC, PDF and BOM CSV. PADS naming and power-mapping limits apply. Page selection applies to PDF only."
+    }
+}
+proc ::TriExport::formatChanged {} {
+    updateFormatNote
+    if {[catch {saveSettings} message options]} { reportError "Could not save the selected format" $message $options }
 }
 
 proc ::TriExport::findGhostscript {} {
@@ -562,15 +590,16 @@ proc ::TriExport::buildDialog {} {
     variable ghostscript
     package require json
     loadSettings
+    updateFormatNote
     if {$ghostscript eq ""} { set ghostscript [findGhostscript] }
     toplevel $win
     wm title $win "TriExport $::TriExport::version - OrCAD 17.2"
-    wm geometry $win 760x650
-    wm minsize $win 620 520
+    wm geometry $win 760x690
+    wm minsize $win 620 560
     wm protocol $win WM_DELETE_WINDOW ::TriExport::closeWindow
     ttk::frame $win.top -padding 14
     pack $win.top -side top -fill x
-    ttk::label $win.top.title -text "Allegro Netlist  /  Schematic PDF  /  BOM" -font {"Segoe UI" 14 bold}
+    ttk::label $win.top.title -text "Netlist  /  Schematic PDF  /  BOM" -font {"Segoe UI" 14 bold}
     ttk::label $win.top.design -textvariable ::TriExport::designPath -wraplength 690
     pack $win.top.title $win.top.design -anchor w -pady 4
     ttk::frame $win.location -padding {14 0 14 8}
@@ -582,6 +611,14 @@ proc ::TriExport::buildDialog {} {
     grid $win.location.path -row 0 -column 1 -sticky ew
     grid $win.location.browse -row 0 -column 2 -padx {8 0}
     grid columnconfigure $win.location 1 -weight 1
+    ttk::frame $win.format -padding {14 0 14 8}
+    pack $win.format -fill x
+    ttk::label $win.format.label -text "Netlist format"
+    ttk::combobox $win.format.choice -textvariable ::TriExport::netlistFormat -state readonly \
+        -values {{Allegro (ZIP)} {PADS PowerPCB V3 (ASC)}} -width 30
+    bind $win.format.choice <<ComboboxSelected>> ::TriExport::formatChanged
+    pack $win.format.label -side left -padx {0 10}
+    pack $win.format.choice -side left -fill x -expand 1
     ttk::frame $win.pageTools -padding {14 4}
     pack $win.pageTools -fill x
     ttk::label $win.pageTools.label -text "PDF pages (multiple selection)"
@@ -618,7 +655,7 @@ proc ::TriExport::buildDialog {} {
     grid $win.options.driver -row 1 -column 1 -sticky ew -pady 8
     grid $win.options.paper -row 1 -column 2 -padx {8 0}
     grid columnconfigure $win.options 1 -weight 1
-    ttk::label $win.options.note -text "Output: Allegro netlist ZIP, PDF and BOM CSV. Unzip the netlist before importing into Allegro. Page selection applies to PDF only." -wraplength 690
+    ttk::label $win.options.note -textvariable ::TriExport::formatNote -wraplength 690
     grid $win.options.note -row 2 -column 0 -columnspan 3 -sticky w
     ttk::frame $win.bottom -padding {14 0 14 14}
     pack $win.bottom -fill x
@@ -664,6 +701,8 @@ proc ::TriExport::prepareJob {} {
     variable jobDir
     variable statusText
     set jobDir ""
+    # Freeze the selection before rendering and reject invalid values early.
+    set format [netlistFormatId]
     set selected {}
     set i 0
     foreach page $pages { if {$checked($i)} { lappend selected $page }; incr i }
@@ -695,7 +734,7 @@ proc ::TriExport::prepareJob {} {
     set ps [renderPostscript [file join $jobDir spool] $path]
     assertSaved $d
     set scalars [dict create design $path design_hash $hash cadence_root $cadenceRoot \
-        root [file normalize $root] ghostscript [file normalize $ghostscript] postscript $ps netlist_format allegro-pst]
+        root [file normalize $root] ghostscript [file normalize $ghostscript] postscript $ps netlist_format $format]
     set manifest [file join $jobDir job.json]
     writeUtf8 $manifest [jobJson $scalars $selected $printedPages $bom]
     variable workerChannel

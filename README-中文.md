@@ -1,15 +1,14 @@
-# OrCAD 17.2 TriExport · 1.0.0-rc7（英文界面）
+# OrCAD 17.2 TriExport · 1.0.0-rc8（英文界面）
 
-本插件在 Capture 顶部 Help 右侧添加 **TriExport > Export Files...** 菜单。选择根目录和 PDF 原理图页后，一次输出 **Allegro 原生网表 ZIP、合并 PDF、BOM CSV**。
+本插件在 Capture 顶部 Help 右侧添加 **TriExport > Export Files...** 菜单。选择根目录和 PDF 原理图页后，选择 **Allegro 或 PADS** 网表格式，一次输出 **所选网表、合并 PDF、BOM CSV**。
 
-rc7 按要求将 PADS 网表替换为 Allegro 原生网表，不再生成 ASC。原先“结果目录恰好三个文件”的约定仍保留，因此把 Allegro 所需的三个 DAT 封装成一个 ZIP。PDF 选页、英文界面和 BOM 保持原有用法。
-
+rc8 增加 **Netlist format** 下拉框，默认 Allegro，切换后记住选择。一次只输出一种网表。结果目录仍恰好三个文件：Allegro 所需的三个 DAT 封装成一个 ZIP，PADS 则输出一个 ASC。
 ## 安装与更新
 
 1. 阅读 [环境要求](ENVIRONMENT.md)，确认 Windows x64、Capture / Capture CIS 17.2、可用许可、PostScript 打印驱动和 Ghostscript。
-2. 从 [GitHub Releases](https://github.com/yangzhaoxu411/orcad-triexport-17.2/releases) 下载 `OrCAD-TriExport-17.2-1.0.0-rc7.zip` 并完整解压。Source code 压缩包不含编译程序。
+2. 从 [GitHub Releases](https://github.com/yangzhaoxu411/orcad-triexport-17.2/releases) 下载 `OrCAD-TriExport-17.2-1.0.0-rc8.zip` 并完整解压。Source code 压缩包不含编译程序。
 3. 保存工作并关闭 Capture，双击 `install.cmd`。不要只复制 EXE；安装器会校验整个 payload。
-4. 重新打开 Capture，使用 **TriExport > Export Files...**。标题应为 **1.0.0-rc7**，主标题应显示 **Allegro Netlist**。
+4. 重新打开 Capture，使用 **TriExport > Export Files...**。标题应为 **1.0.0-rc8**，并出现 **Netlist format** 下拉框。
 
 未找到 Cadence 路径时运行：
 
@@ -25,21 +24,22 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -CadenceRo
 - 加载入口：`<Cadence根目录>\tools\capture\tclscripts\capAutoLoad\zzTriExport.tcl`
 - 设置与日志：`%LOCALAPPDATA%\OrCADTriExport\data-17.2`
 
-已有安装可用 `-UpdateForNextLaunch` 在 Capture 运行时更新磁盘文件，但仍必须保存工作后重启 Capture。旧面板向新版程序发送任务会收到明确的重启提示，不会悄悄改变旧界面所显示的导出格式。
+已有安装可用 `-UpdateForNextLaunch` 在 Capture 运行时更新磁盘文件，但仍必须保存工作后重启 Capture。rc7 面板仍可按其声明的 Allegro 格式导出，但需要重启才显示新下拉框；更早未声明格式的面板会收到重启提示。
 
 ## 导出
 
 1. 打开并保存目标 DSN。未保存的修改会阻止导出，插件不会代替用户保存。
 2. 在 **Output root folder** 中选择已存在的目录。
-3. 在 **PDF pages** 中勾选所需页面，支持不连续多选、Select all、Clear all 和 Refresh。页面按列表顺序排列。
-4. **Ghostscript** 选择 `gswin64c.exe`，不要选 Ghostscript 安装器。默认 PDF 驱动为 `OrCADPS_17.2`。
-5. 保留原图纸张尺寸或选择 A4/A3 横向，点击 **Export Files**。
+3. 在 **Netlist format** 选择 **Allegro (ZIP)** 或 **PADS PowerPCB V3 (ASC)**，选择会立即保存。升级自旧版且尚未保存格式时默认 Allegro。
+4. 在 **PDF pages** 中勾选所需页面，支持不连续多选、Select all、Clear all 和 Refresh。页面按列表顺序排列。
+5. **Ghostscript** 选择 `gswin64c.exe`，默认 PDF 驱动为 `OrCADPS_17.2`。
+6. 保留原图纸张尺寸或选择 A4/A3 横向，点击 **Export Files**。导出期间下拉框锁定，任务使用点击时的格式。
 
 成功后新建一个结果目录：
 
 ```text
 项目名_YYYYMMDD_HHMMSS/
-    项目名_allegro.zip
+    项目名_allegro.zip  # 选择 PADS 时为 项目名.asc，两者只生成一个
     项目名.pdf
     项目名.csv
 ```
@@ -58,10 +58,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -CadenceRo
 
 ZIP 是交付容器，不能直接当网表导入。三个 DAT 的文件名不要更改。本插件不会启动 Netrev 创建或修改 PCB，也不会生成布局或封装库。
 
+## 在 PADS 中使用
+
+选择 **PADS PowerPCB V3 (ASC)** 后，网表为单个 `.asc`，文件头为 `!PADS-POWERPCB-V3.0-MILS!`。在支持该网表格式的 PADS 中导入，使用匹配的封装库。
+
+此分支恢复原 PADS 转换和检查：位号最长 16 字符、网络名最长 47 字符，位号/网络不允许仅大小写不同；名称须符合支持的 ASCII 字符集。带空格、中文或 `?` 的封装名会报错，不会静默改名。普通隐藏电源脚按原生属性展开，无法确定的 POWER_GROUP 重映射会报错。Allegro 分支不套用这些 PADS 限制。
+
 ## 格式与边界
 
 - 调用 Capture 17.2 原生 `pstswp.exe` 和 `allegro.cfg`，仅把独立临时 DSN 副本交给网表工具。工具可以更新副本中的打包信息，原始 DSN 始终接受哈希校验。
-- 原生 DAT 逐字节存入 ZIP，包括原编码、换行、隐式电源、POWER_GROUP、层次及属性；不再经过 PADS 转换或其字符/长度限制。
+- Allegro 分支将原生 DAT 逐字节存入 ZIP，包括原编码、换行、隐式电源、POWER_GROUP、层次及属性；PADS 分支独立转换成 ASC。
 - 插件只做原生文件类型、完整性、物理元件、连接和 BOM 一致性检查。封装仍须在目标 Allegro 库中有效，不会自动改名或猜测。
 - BOM 为带 UTF-8 BOM 的 CSV，包含 Item、Reference、Quantity、Value、PCB Footprint、Part Number、Manufacturer、Description、DNP / Assembly note。同位号多单元只计一次，DNP/DNI 保留为备注，不自动删除不装件。
 - 面向完整基础设计，不按 CIS 活动装配变体裁剪网表/BOM。常规三文件 Capture 流程不等于 Design Entry HDL 的 Constraint Manager 多文件流程，也不代表所有设计约束已迁移。
@@ -70,11 +76,11 @@ ZIP 是交付容器，不能直接当网表导入。三个 DAT 的文件名不�
 
 ## 故障与卸载
 
-标题仍为旧版或仍显示 PADS：保存并重启 Capture。确认安装到 17.2，不是其他主版本。
+看不到 Netlist format 下拉框：保存并重启 Capture，确认标题为 rc8。确认安装到 17.2，不是其他主版本。
 
-打印失败：检查驱动、Ghostscript 可执行文件和日志。rc7 保留打印前 DSN 选择、实际页回调核对及非空 PostScript 检查。打印日志与 Tcl 调用栈分别在 `pdf-print.log`、`capture-error.log`。
+打印失败：检查驱动、Ghostscript 可执行文件和日志。本版保留打印前 DSN 选择、实际页回调核对及非空 PostScript 检查。打印日志与 Tcl 调用栈分别在 `pdf-print.log`、`capture-error.log`。
 
-网表失败：检查 `diagnostic.log` 中 Cadence 原生错误；日志也记录每个原生 DAT 的 SHA-256，ZIP 校验时与之核对。日志可能包含工程内容，不要直接上传公开仓库。
+网表失败：检查 `diagnostic.log` 中 Cadence 原生错误；Allegro 分支日志也记录每个原生 DAT 的 SHA-256，ZIP 校验时与之核对。日志可能包含工程内容，不要直接上传公开仓库。
 
 退出 Capture 后运行 `uninstall.cmd`。只删除本插件拥有的程序目录和加载入口，保留设置、日志、导出结果和 Ghostscript。
 

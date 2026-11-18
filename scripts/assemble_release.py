@@ -8,7 +8,7 @@ import sys
 import zipfile
 
 BASE = Path(__file__).resolve().parents[1]
-NAME = "OrCAD-TriExport-17.2-1.0.0-rc7"
+NAME = "OrCAD-TriExport-17.2-1.0.0-rc8"
 RELEASE = BASE / "release" / NAME
 
 

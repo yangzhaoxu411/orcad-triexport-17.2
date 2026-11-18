@@ -162,15 +162,102 @@ class AllegroTests(WorkspaceCase):
             writer.add_blank_page(width=300, height=400)
             writer.write(output)
             writer.close()
-        with patch.object(w, "native_netlist", return_value=self.dir), patch.object(w, "make_pdf", side_effect=fake_pdf):
-            result = w.execute_job(job, self.dir)
-        out = Path(result["output"])
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["parts"], 2)
-        self.assertEqual({p.name for p in out.iterdir()}, {"source_allegro.zip", "source.pdf", "source.csv"})
-        with zipfile.ZipFile(out / "source_allegro.zip") as z:
-            for name in w.ALLEGRO_FILES:
-                self.assertEqual(z.read(name), (self.dir / name).read_bytes())
+        for format_id, filename in [("allegro-pst", "source_allegro.zip"), ("pads-v3", "source.asc")]:
+            with self.subTest(format=format_id):
+                job["netlist_format"] = format_id
+                with patch.object(w, "native_netlist", return_value=self.dir), patch.object(w, "make_pdf", side_effect=fake_pdf):
+                    result = w.execute_job(job, self.dir)
+                out = Path(result["output"])
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["netlist_format"], format_id)
+                self.assertEqual(result["parts"], 2)
+                self.assertEqual({p.name for p in out.iterdir()}, {filename, "source.pdf", "source.csv"})
+                if format_id == "allegro-pst":
+                    with zipfile.ZipFile(out / filename) as z:
+                        for name in w.ALLEGRO_FILES:
+                            self.assertEqual(z.read(name), (self.dir / name).read_bytes())
+                else:
+                    self.assertTrue((out / filename).read_text().startswith("!PADS-POWERPCB-V3.0-MILS!"))
+                    self.assertIn("U2.14", (out / filename).read_text())
+
+    def test_failed_pads_export_commits_nothing_and_does_not_fall_back(self):
+        self.fixtures(chip=CHIP.replace("DIP14", "INVALID FOOTPRINT"))
+        root = self.dir / "output"
+        root.mkdir()
+        job = {"netlist_format": "pads-v3", "design": "source.dsn", "root": str(root)}
+        with patch.object(w, "native_netlist", return_value=self.dir), patch.object(w, "make_pdf") as pdf:
+            with self.assertRaisesRegex(w.ExportError, "Invalid PADS"):
+                w.execute_job(job, self.dir)
+        pdf.assert_not_called()
+        self.assertEqual(list(root.iterdir()), [])
+
+
+class PadsTests(WorkspaceCase):
+    def test_full_connectivity_and_hidden_power(self):
+        footprints = w.convert_pads(self.fixtures(), self.dir / "demo.asc")
+        self.assertEqual(footprints, {"U1": "DIP14", "U2": "DIP14"})
+        text = (self.dir / "demo.asc").read_text()
+        self.assertEqual(text.count("U1.14"), 1)
+        self.assertIn("*SIGNAL* GND\nU1.7 U2.7", text)
+        self.assertIn("*SIGNAL* VCC\nU1.14 U2.14", text)
+        self.assertIn("*SIGNAL* DATA\nU1.1 U2.2", text)
+        self.assertTrue(text.startswith("!PADS-POWERPCB-V3.0-MILS!"))
+        self.assertTrue(text.endswith("*END*\n"))
+
+    def test_explicit_power_connection_wins(self):
+        nets = NETS.replace("NET_NAME 'VCC'", "NET_NAME '+3V3'")
+        w.convert_pads(self.fixtures(nets=nets), self.dir / "demo.asc")
+        text = (self.dir / "demo.asc").read_text()
+        self.assertIn("*SIGNAL* +3V3\nU1.14", text)
+        self.assertIn("*SIGNAL* VCC\nU2.14", text)
+
+    def test_conflicting_pin_fails(self):
+        nets = NETS.replace("NODE_NAME U1 14", "NODE_NAME U1 1")
+        with self.assertRaisesRegex(w.ExportError, "appears on both"):
+            w.convert_pads(self.fixtures(nets=nets), self.dir / "bad.asc")
+
+    def test_truncated_input_fails(self):
+        with self.assertRaisesRegex(w.ExportError, "END"):
+            w.convert_pads(self.fixtures(nets=NETS.replace("END.", "")), self.dir / "bad.asc")
+
+    def test_missing_footprint_fails(self):
+        with self.assertRaisesRegex(w.ExportError, "PCB Footprint"):
+            w.convert_pads(self.fixtures(chip=CHIP.replace("JEDEC_TYPE='DIP14';", "")), self.dir / "bad.asc")
+
+    def test_unsupported_name_fails_without_renaming(self):
+        with self.assertRaisesRegex(w.ExportError, "Invalid PADS"):
+            w.convert_pads(self.fixtures(nets=NETS.replace("'DATA'", "'数据信号'")), self.dir / "bad.asc")
+
+    def test_net_length_and_case_conflicts(self):
+        for name in ("D" * 48, "vcc"):
+            with self.subTest(name=name), self.assertRaises(w.ExportError):
+                w.convert_pads(self.fixtures(nets=NETS.replace("'DATA'", repr(name))), self.dir / "bad.asc")
+
+    def test_unknown_part_and_primitive_fail(self):
+        with self.assertRaisesRegex(w.ExportError, "unknown component"):
+            w.convert_pads(self.fixtures(nets=NETS.replace("U1 1", "U9 1")), self.dir / "bad.asc")
+        with self.assertRaisesRegex(w.ExportError, "missing primitive"):
+            w.convert_pads(self.fixtures(parts=PARTS.replace("'DEVICE'", "'MISSING'")), self.dir / "bad.asc")
+
+    def test_power_group_not_guessed(self):
+        chip = CHIP.replace("end_body;", "POWER_GROUP='GROUP1'; end_body;")
+        with self.assertRaisesRegex(w.ExportError, "POWER_GROUP"):
+            w.convert_pads(self.fixtures(chip=chip), self.dir / "bad.asc")
+
+    def test_lexer_quotes_and_literal_backslashes(self):
+        tokens = w.lex_pst("{comment} X='C:\\new\\a'; Y='Bob''s';")
+        self.assertEqual(tokens[2].value, "C:\\new\\a")
+        self.assertEqual(tokens[6].value, "Bob's")
+        for text in ["X='truncated", "{truncated"]:
+            with self.assertRaises(w.ExportError):
+                w.lex_pst(text)
+
+    def test_multi_pin_power_expression(self):
+        chip = CHIP.replace("(VCC:14)", "(VCC:14,28)(AUX:30)")
+        w.convert_pads(self.fixtures(chip=chip), self.dir / "demo.asc")
+        text = (self.dir / "demo.asc").read_text()
+        self.assertIn("U1.28", text)
+        self.assertIn("*SIGNAL* AUX\nU1.30 U2.30", text)
 
 
 class BomTests(WorkspaceCase):
@@ -288,6 +375,15 @@ class CommitTests(WorkspaceCase):
             w.commit_three(self.files(), root, "design", copier=corrupt)
         self.assertEqual(list(root.iterdir()), [])
 
+    def test_pads_commit_and_mixed_formats(self):
+        files = self.files()
+        files[0] = files[0].with_suffix(".asc")
+        files[0].write_bytes(b"PADS")
+        output = w.commit_three(files, self.dir, "pads")
+        self.assertEqual({p.suffix for p in output.iterdir()}, {".asc", ".pdf", ".csv"})
+        with self.assertRaises(w.ExportError):
+            w.commit_three([files[0], self.files()[0], files[1]], self.dir, "mixed")
+
     def test_incomplete_set_rejected(self):
         with self.assertRaises(w.ExportError):
             w.commit_three(self.files()[:2], self.dir, "design")
@@ -302,6 +398,13 @@ class ProcessTests(WorkspaceCase):
         with patch.object(w, "native_netlist") as native, self.assertRaisesRegex(w.ExportError, "Restart Capture"):
             w.execute_job({}, self.dir)
         native.assert_not_called()
+
+    def test_unsupported_format_fails_before_native_command(self):
+        for value in ["unknown", "", [], 3]:
+            with self.subTest(value=value), patch.object(w, "native_netlist") as native:
+                with self.assertRaisesRegex(w.ExportError, "Unsupported netlist format"):
+                    w.execute_job({"netlist_format": value}, self.dir)
+                native.assert_not_called()
 
     def native_fixture(self):
         root = self.dir / "cadence"
