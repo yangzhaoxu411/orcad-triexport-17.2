@@ -8,7 +8,7 @@ import sys
 import zipfile
 
 BASE = Path(__file__).resolve().parents[1]
-NAME = "OrCAD-TriExport-17.2-1.0.0-rc8"
+NAME = "OrCAD-TriExport-17.2-1.0.0-rc9"
 RELEASE = BASE / "release" / NAME
 
 
@@ -32,7 +32,7 @@ def main():
     payload = RELEASE / "payload"
     payload.mkdir()
     (payload / ".triexport-owned").write_text("OrCADTriExport-17.2-owned-v1")
-    for file in ["TriExport.tcl", "zzTriExport.tcl"]:
+    for file in ["TriExport.tcl", "BomFilters.tcl", "zzTriExport.tcl"]:
         copy(BASE / "src" / file, payload / file)
     shutil.copytree(BASE / ".work/dist/TriExportWorker", payload / "bin")
     for name in ["README.md", "README-中文.md", "ENVIRONMENT.md", "CHANGELOG.md", "VALIDATION.md", "LICENSE.txt", "install.cmd", "install.ps1",

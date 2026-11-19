@@ -2,11 +2,11 @@
 
 适用于 **OrCAD Capture / Capture CIS 17.2** 的 Windows 扩展，提供英文操作界面。选择 Allegro 或 PADS 网表格式，一次导出网表、原理图 PDF 和 BOM，成功结果目录严格只有三个文件。
 
-当前版本：**1.0.0-rc8**（候选版本）。
+当前版本：**1.0.0-rc9**（候选版本）。
 
 ## 下载与安装
 
-从本仓库的 [Releases](https://github.com/yangzhaoxu411/orcad-triexport-17.2/releases) 下载 `OrCAD-TriExport-17.2-1.0.0-rc8.zip`，完整解压，保存工作并关闭 Capture，然后双击 `install.cmd`。重新启动 Capture 后，使用顶部 **Help** 右侧的 **TriExport > Export Files...**。
+从本仓库的 [Releases](https://github.com/yangzhaoxu411/orcad-triexport-17.2/releases) 下载 `OrCAD-TriExport-17.2-1.0.0-rc9.zip`，完整解压，保存工作并关闭 Capture，然后双击 `install.cmd`。重新启动 Capture 后，使用顶部 **Help** 右侧的 **TriExport > Export Files...**。
 
 GitHub 自动生成的 **Source code** 压缩包只有源码，不含运行所需的编译程序。普通用户请下载上述安装 ZIP；校验值位于同一 Release 的 `.zip.sha256.txt` 文件。
 
@@ -30,7 +30,8 @@ GitHub 自动生成的 **Source code** 压缩包只有源码，不含运行所�
 2. 打开 **TriExport > Export Files...**，选择 **Output root folder**。
 3. 在 **Netlist format** 选择 **Allegro (ZIP)** 或 **PADS PowerPCB V3 (ASC)**。
 4. 多选要放入 PDF 的页面，支持不连续选择；设置 Ghostscript 路径和打印驱动。
-5. 点击 **Export Files**，等待成功提示。
+5. 如需筛选 BOM，打开 **BOM Filters...** 设置规则并保存；默认导出全部器件。
+6. 点击 **Export Files**，等待成功提示。
 
 每次成功导出会新建独立目录：
 
@@ -42,7 +43,22 @@ output-root/
     design.csv    # UTF-8 BOM 编码的物料表
 ```
 
-页面勾选只控制 PDF；网表和 BOM 始终覆盖完整根设计。不会覆盖历史结果，也不会在结果目录内留下中间打印数据或日志。
+页面勾选只控制 PDF；网表覆盖完整根设计，BOM 可独立按规则筛选。不会覆盖历史结果，也不会在结果目录内留下中间打印数据或日志。
+
+## 筛选 BOM 器件
+
+点击 **BOM Filters...**，选择 **exclude**（不导出）或 **include**（只导出匹配项），设置字段、运算符和值，点击 **Add rule**，最后 **Save filters**。
+
+| 目的 | 设置示例 |
+| --- | --- |
+| 排除所有电阻位号 | `exclude` / `Reference` / `glob` / `R*` |
+| 排除不装件 | `exclude` / `DNP / DNI` / `equals` / `YES`，按工程实际属性值填写 |
+| 排除自定义属性 | `exclude` / `Custom property`，属性名 `Assembly Status`，`equals` / `Not fitted` |
+| 排除同颜色器件 | 输入一个同颜色器件的位号，点 **Read color**，保持 `exclude` 并点 **Add rule** |
+
+文字匹配忽略大小写和首尾空格。没有 include 规则时包含全部器件；有 include 规则时可选择满足任一（any）或全部（all）；exclude 优先。颜色匹配器件保存的颜色 ID，不包括选中高亮、引脚或文字颜色。自定义的 `Color` 属性用 Custom property 筛选。
+
+规则保存后下次继续使用；取消勾选 **Enable BOM filters** 恢复全量 BOM。BOM 筛选不改变网表、PDF 或三个文件的约定。详细规则、空值和多单元行为见 [使用说明](README-中文.md#bom-筛选规则)。
 
 ## 选择网表格式
 

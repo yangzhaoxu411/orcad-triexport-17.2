@@ -1,7 +1,7 @@
 # OrCAD Capture 17.2 TriExport. ASCII UI; user data remains UTF-8.
 # Entry points use the documented Capture Tcl API; no window automation.
 namespace eval ::TriExport {
-    variable version "1.0.0-rc8"
+    variable version "1.0.0-rc9"
     variable home [file dirname [file normalize [info script]]]
     variable cadenceRoot ""
     variable registered 0
@@ -25,6 +25,7 @@ namespace eval ::TriExport {
     variable pdfLog ""
     variable pdfCallbackError ""
 }
+source -encoding utf-8 [file join $::TriExport::home BomFilters.tcl]
 
 proc ::TriExport::readUtf8 {path} {
     set f [open $path r]
@@ -65,24 +66,37 @@ proc ::TriExport::jsonObjects {rows} {
     foreach row $rows { lappend values [jsonObject $row] }
     return "\[[join $values ,]\]"
 }
-proc ::TriExport::jobJson {scalars selected printed bom} {
+proc ::TriExport::jobJson {scalars selected printed bom {filter {}}} {
     set fields {}
     dict for {k v} $scalars { lappend fields "[jsonString $k]:[jsonString $v]" }
     lappend fields "\"selected_pages\":[jsonObjects $selected]"
     lappend fields "\"printed_pages\":[jsonObjects $printed]"
-    lappend fields "\"bom_rows\":[jsonObjects $bom]"
+    lappend fields "\"bom_rows\":[bomRowsJson $bom]"
+    if {$filter ne ""} { lappend fields "\"bom_filter\":[bomFilterJson $filter]" }
     return "\{[join $fields ,]\}"
 }
 proc ::TriExport::loadSettings {} {
+    variable bomFilter
+    variable bomFilterLoadError
+    set bomFilter [defaultBomFilter]
+    set bomFilterLoadError ""
     set ::TriExport::netlistFormat "Allegro (ZIP)"
     set path [file join [dataHome] settings.json]
     if {![file isfile $path]} { return }
-    if {[catch {package require json; set data [::json::json2dict [readUtf8 $path]]}]} { return }
+    if {[catch {package require json; set data [::json::json2dict [readUtf8 $path]]}]} {
+        set bomFilterLoadError "Could not read saved settings. Open BOM Filters and save the corrected settings."
+        return
+    }
     foreach key {root ghostscript driver paper} {
         if {[dict exists $data $key]} { set ::TriExport::$key [dict get $data $key] }
     }
     if {[dict exists $data netlist_format] && [dict get $data netlist_format] eq "pads-v3"} {
         set ::TriExport::netlistFormat "PADS PowerPCB V3 (ASC)"
+    }
+    if {[dict exists $data bom_filter]} {
+        if {[catch {set bomFilter [validateBomFilter [dict get $data bom_filter]]} err]} {
+            set bomFilterLoadError "Saved BOM filters are invalid. Open BOM Filters and save the corrected settings: $err"
+        }
     }
     # Migrate rc1 labels without retaining locale-dependent UI text.
     if {[string match {A4 *} $::TriExport::paper]} { set ::TriExport::paper "A4 landscape" }
@@ -92,12 +106,16 @@ proc ::TriExport::loadSettings {} {
     }
 }
 proc ::TriExport::saveSettings {} {
+    variable bomFilter
+    variable bomFilterLoadError
+    if {$bomFilterLoadError ne ""} { error $bomFilterLoadError }
     file mkdir [dataHome]
     set data {}
     foreach key {root ghostscript driver paper} { dict set data $key [set ::TriExport::$key] }
     dict set data netlist_format [netlistFormatId]
     set path [file join [dataHome] settings.json]
-    writeUtf8 "$path.tmp" [jsonObject $data]
+    set encoded [jsonObject $data]
+    writeUtf8 "$path.tmp" "[string range $encoded 0 end-1],\"bom_filter\":[bomFilterJson $bomFilter]\}"
     file rename -force "$path.tmp" $path
 }
 
@@ -219,7 +237,7 @@ proc ::TriExport::enumeratePages {d} {
     if {![llength $rows]} { error "The active design has no schematic pages to export." }
     return $rows
 }
-proc ::TriExport::walkBom {occ depth} {
+proc ::TriExport::walkBom {occ depth {filter {}}} {
     if {$depth > 128} { error "Hierarchy exceeds 128 levels. Check for recursive references." }
     set s [DboState]
     set iter "NULL"
@@ -238,13 +256,14 @@ proc ::TriExport::walkBom {occ depth} {
             if {![$s OK]} { error "Could not read the component type." }
             if {$primitive} {
                 set ref [getString $inst GetReference]
-                lappend rows [dict create ref $ref value [getString $inst GetPartValue] \
+                set row [dict create ref $ref value [getString $inst GetPartValue] \
                     part_number [property $inst {{Part Number} PartNumber MPN {Manufacturer Part Number}}] \
                     manufacturer [property $inst {Manufacturer MFR}] \
                     description [property $inst {Description}] \
                     dnp [property $inst {DNP DNI {Do Not Populate} {Do Not Stuff}}]]
+                lappend rows [captureFilterValues $inst $row $filter]
             } else {
-                lappend rows {*}[walkBom $inst [expr {$depth + 1}]]
+                lappend rows {*}[walkBom $inst [expr {$depth + 1}] $filter]
             }
         }
     } finally {
@@ -253,12 +272,12 @@ proc ::TriExport::walkBom {occ depth} {
     }
     return $rows
 }
-proc ::TriExport::enumerateBom {d} {
+proc ::TriExport::enumerateBom {d {filter {}}} {
     set s [DboState]
     try {
         set rootOcc [$d GetRootOccurrence $s]
         if {$rootOcc eq "NULL" || ![$s OK]} { error "The active design has no valid root occurrence." }
-        return [walkBom $rootOcc 0]
+        return [walkBom $rootOcc 0 $filter]
     } finally { $s -delete }
 }
 
@@ -591,10 +610,11 @@ proc ::TriExport::buildDialog {} {
     package require json
     loadSettings
     updateFormatNote
+    updateBomSummary
     if {$ghostscript eq ""} { set ghostscript [findGhostscript] }
     toplevel $win
     wm title $win "TriExport $::TriExport::version - OrCAD 17.2"
-    wm geometry $win 760x690
+    wm geometry $win 760x720
     wm minsize $win 620 560
     wm protocol $win WM_DELETE_WINDOW ::TriExport::closeWindow
     ttk::frame $win.top -padding 14
@@ -619,6 +639,12 @@ proc ::TriExport::buildDialog {} {
     bind $win.format.choice <<ComboboxSelected>> ::TriExport::formatChanged
     pack $win.format.label -side left -padx {0 10}
     pack $win.format.choice -side left -fill x -expand 1
+    ttk::frame $win.bom -padding {14 0 14 8}
+    pack $win.bom -fill x
+    ttk::button $win.bom.settings -text "BOM Filters..." -command ::TriExport::showBomFilters
+    ttk::label $win.bom.summary -textvariable ::TriExport::bomSummary -wraplength 530
+    pack $win.bom.settings -side left -padx {0 10}
+    pack $win.bom.summary -side left -fill x -expand 1
     ttk::frame $win.pageTools -padding {14 4}
     pack $win.pageTools -fill x
     ttk::label $win.pageTools.label -text "PDF pages (multiple selection)"
@@ -703,6 +729,12 @@ proc ::TriExport::prepareJob {} {
     set jobDir ""
     # Freeze the selection before rendering and reject invalid values early.
     set format [netlistFormatId]
+    variable win
+    if {[winfo exists $win.bomFilters]} { error "Save or cancel BOM Filters before exporting." }
+    variable bomFilterLoadError
+    variable bomFilter
+    if {$bomFilterLoadError ne ""} { error $bomFilterLoadError }
+    set filter [validateBomFilter $bomFilter]
     set selected {}
     set i 0
     foreach page $pages { if {$checked($i)} { lappend selected $page }; incr i }
@@ -728,7 +760,7 @@ proc ::TriExport::prepareJob {} {
     if {![regexp {^[0-9a-f]{64}$} $hash]} { error "Could not verify the design file revision." }
     set statusText "Reading the BOM for the full design..."
     update idletasks
-    set bom [enumerateBom $d]
+    set bom [enumerateBom $d $filter]
     set statusText "Printing schematics to PostScript. Please wait..."
     update idletasks
     set ps [renderPostscript [file join $jobDir spool] $path]
@@ -736,7 +768,7 @@ proc ::TriExport::prepareJob {} {
     set scalars [dict create design $path design_hash $hash cadence_root $cadenceRoot \
         root [file normalize $root] ghostscript [file normalize $ghostscript] postscript $ps netlist_format $format]
     set manifest [file join $jobDir job.json]
-    writeUtf8 $manifest [jobJson $scalars $selected $printedPages $bom]
+    writeUtf8 $manifest [jobJson $scalars $selected $printedPages $bom $filter]
     variable workerChannel
     set workerChannel [open [list | $worker run $manifest 2>@1] r]
     fconfigure $workerChannel -blocking 0 -encoding utf-8
@@ -786,7 +818,10 @@ proc ::TriExport::poll {} {
         return
     }
     if {[dict get $r ok]} {
-        set statusText "Exported [dict get $r pages] PDF pages and [dict get $r parts] components to three files."
+        set statusText "Exported [dict get $r pages] PDF pages and [dict get $r parts] BOM components to three files."
+        if {[dict exists $r bom_excluded]} {
+            append statusText " BOM excluded: [dict get $r bom_excluded]. Netlist: [dict get $r netlist_parts] components."
+        }
         tk_messageBox -parent $win -title "Export complete" -icon info \
             -message "$statusText\n\n[dict get $r output]"
     } else {

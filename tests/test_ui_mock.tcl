@@ -49,6 +49,14 @@ proc widgetCommand {path method args} {
         create {return 1}
         bbox {return {0 0 600 200}}
         state {dict set ::widgets $path lastState $args; return}
+        heading - column {return}
+        children {if {[dict exists $::widgets $path rows]} {return [dict keys [dict get $::widgets $path rows]]}; return {}}
+        insert {set id [lindex $args 3]; dict set ::widgets $path rows $id [lindex $args 5]; return $id}
+        delete {dict unset ::widgets $path rows [lindex $args 0]; return}
+        selection {
+            if {[llength $args]} {dict set ::widgets $path selection [lindex $args 1]; return}
+            if {[dict exists $::widgets $path selection]} {return [dict get $::widgets $path selection]}; return {}
+        }
         configure - itemconfigure - yview - set {return}
         default {error "unsupported widget method: $method"}
     }
@@ -87,7 +95,7 @@ proc tk_messageBox {args} {requireTk; lappend ::messages $args}
 proc toplevel {path args} {widget Toplevel $path {*}$args}
 proc canvas {path args} {widget Canvas $path {*}$args}
 namespace eval ::ttk {}
-foreach {name class} {frame TFrame label TLabel button TButton entry TEntry checkbutton TCheckbutton scrollbar TScrollbar combobox TCombobox} {
+foreach {name class} {frame TFrame label TLabel button TButton entry TEntry checkbutton TCheckbutton scrollbar TScrollbar combobox TCombobox treeview Treeview} {
     interp alias {} ::ttk::$name {} widget $class
 }
 proc ::TriExport::activeDesign {} {return mockDesign}
@@ -149,6 +157,40 @@ check {$::TriExport::selectedCount eq "0 / 3 pages selected"} "clear all button 
 set all [dict get [dict get $widgets .triExport.pageTools.all options] -command]
 eval $all
 check {$::TriExport::selectedCount eq "3 / 3 pages selected"} "select all button works"
+set openBom [dict get $widgets .triExport.bom.settings options -command]
+eval $openBom
+check {[winfo exists .triExport.bomFilters.rules]} "BOM settings opens a rule editor"
+set ::TriExport::bomField "DNP / DNI"
+set ::TriExport::bomOperator equals
+set ::TriExport::bomValue YES
+eval [dict get $widgets .triExport.bomFilters.actions.add options -command]
+check {[llength $::TriExport::bomRules] == 1 && $::TriExport::bomEnabled} "Add rule enables draft filtering"
+.triExport.bomFilters.rules selection set r0
+::TriExport::selectBomRule
+set ::TriExport::bomValue DNI
+eval [dict get $widgets .triExport.bomFilters.actions.update options -command]
+check {[dict get [lindex $::TriExport::bomRules 0] value] eq "DNI"} "selected rule can be updated"
+eval [dict get $widgets .triExport.bomFilters.bottom.cancel options -command]
+check {![dict get $::TriExport::bomFilter enabled]} "Cancel discards draft rules"
+eval $openBom
+set ::TriExport::bomField "Custom property"
+set ::TriExport::bomProperty {Assembly Status}
+set ::TriExport::bomValue {Not fitted}
+eval [dict get $widgets .triExport.bomFilters.actions.add options -command]
+eval [dict get $widgets .triExport.bomFilters.bottom.save options -command]
+check {[dict get $::TriExport::bomFilter enabled] && [llength [dict get $::TriExport::bomFilter rules]] == 1} "Save applies BOM rules"
+check {[string match {*1 rules enabled*} $::TriExport::bomSummary]} "main panel shows active filtering"
+set ::TriExport::bomFilter [::TriExport::defaultBomFilter]
+::TriExport::loadSettings
+check {[dict get [lindex [dict get $::TriExport::bomFilter rules] 0] property] eq "Assembly Status"} "custom rule persists through settings reload"
+eval $openBom
+.triExport.bomFilters.rules selection set r0
+::TriExport::selectBomRule
+eval [dict get $widgets .triExport.bomFilters.actions.remove options -command]
+check {[llength $::TriExport::bomRules] == 0} "Remove deletes the selected rule"
+set ::TriExport::bomEnabled 0
+eval [dict get $widgets .triExport.bomFilters.bottom.save options -command]
+check {$::TriExport::bomSummary eq "BOM: all components"} "disabling rules restores all-components summary"
 set before [dict size $widgets]
 dict for {path item} $widgets {
     set options [dict get $item options]
@@ -185,6 +227,16 @@ check {[::TriExport::netlistFormatId] eq "allegro-pst"} "settings without a form
 ::TriExport::writeUtf8 [file join $scratch settings.json] [::TriExport::jsonObject [dict create netlist_format "unsupported"]]
 ::TriExport::loadSettings
 check {[::TriExport::netlistFormatId] eq "allegro-pst"} "unknown saved format defaults to Allegro"
+check {![dict get $::TriExport::bomFilter enabled]} "old settings default to unfiltered BOM"
+::TriExport::writeUtf8 [file join $scratch settings.json] {bad JSON}
+::TriExport::loadSettings
+check {$::TriExport::bomFilterLoadError ne ""} "corrupt settings do not silently disable filtering"
+::TriExport::writeUtf8 [file join $scratch settings.json] {{"bom_filter": {"enabled": true}}}
+::TriExport::loadSettings
+check {$::TriExport::bomFilterLoadError ne ""} "invalid saved BOM rules block exports"
+file delete [file join $scratch settings.json]
+::TriExport::loadSettings
+check {$::TriExport::bomFilterLoadError eq ""} "legacy clean settings reset the error"
 set ::TriExport::netlistFormat "invalid"
 set code [catch {::TriExport::prepareJob} message]
 check {$code == 1 && [string match {*Netlist format*} $message]} "invalid current format is rejected before any print or native tool"
@@ -192,6 +244,8 @@ set ::TriExport::netlistFormat "Allegro (ZIP)"
 file delete [file join $scratch settings.json]
 
 # Exercise the real job-preparation path while intercepting native processes.
+set tkLoaded 1
+set failTk 0
 set ::TriExport::home [file join $scratch plugin]
 set ::TriExport::cadenceRoot [file join $scratch cadence]
 set ::TriExport::ghostscript [file join $scratch gswin64c.exe]
@@ -204,11 +258,15 @@ foreach file [list [file join $::TriExport::home bin TriExportWorker.exe] \
     ::TriExport::writeUtf8 $file "synthetic fixture"
 }
 proc ::TriExport::assertSaved {design} {return $::TriExport::designPath}
-proc ::TriExport::enumerateBom {design} {return [list [dict create ref U1 value TEST]]}
+proc ::TriExport::enumerateBom {design {filter {}}} {
+    set ::capturedBomFilter $filter
+    return [list [dict create ref U1 value TEST filter_values [dict create {Assembly Status} {Not fitted}]]]
+}
 proc ::TriExport::renderPostscript {directory path} {
     set ::TriExport::printedPages $::TriExport::pages
     # A re-entrant callback must not change the frozen job format.
     set ::TriExport::netlistFormat "Allegro (ZIP)"
+    set ::TriExport::bomFilter [::TriExport::defaultBomFilter]
     return [file join $directory test.ps]
 }
 proc capIsPrinterDriverAvailable {name} {return 1}
@@ -231,11 +289,16 @@ rename ::after ::realAfter
 proc ::after {args} {return mockTimer}
 foreach {label expected} {{Allegro (ZIP)} allegro-pst {PADS PowerPCB V3 (ASC)} pads-v3} {
     set ::TriExport::netlistFormat $label
+    set intendedFilter [dict create enabled 1 include_match any rules [list [dict create action exclude field property property {Assembly Status} op equals value {Not fitted}]]]
+    set ::TriExport::bomFilter $intendedFilter
     ::TriExport::prepareJob
     set manifest [::json::json2dict [::TriExport::readUtf8 [lindex $submitted end]]]
     check {[dict get $manifest netlist_format] eq $expected} "job contains the selected format despite re-entrant changes"
     check {[llength [dict get $manifest selected_pages]] == 3} "format choice preserves PDF selection"
     check {[dict get $manifest bom_rows] ne ""} "format choice preserves BOM capture"
+    check {[dict get $manifest bom_filter rules] eq [dict get $intendedFilter rules]} "job freezes the BOM rules before print callbacks"
+    check {$::capturedBomFilter eq $intendedFilter} "BOM capture uses the same frozen rules"
+    check {[dict get [lindex [dict get $manifest bom_rows] 0] filter_values {Assembly Status}] eq "Not fitted"} "custom property values are nested JSON data"
     fileevent $::TriExport::workerChannel readable {}
     close $::TriExport::workerChannel
     set ::TriExport::workerChannel ""
@@ -246,5 +309,26 @@ rename ::exec {}
 rename ::realExec ::exec
 rename ::after {}
 rename ::realAfter ::after
+toplevel .triExport
+::TriExport::showBomFilters
+check {[catch {::TriExport::prepareJob} message] && [string match {*Save or cancel BOM Filters*} $message]} "open rule editor blocks export of unsaved rules"
+set previousFilter $::TriExport::bomFilter
+set ::TriExport::bomEnabled 1
+rename ::TriExport::saveSettings ::TriExport::originalSaveSettings
+proc ::TriExport::saveSettings {} {error "injected settings write failure"}
+check {[catch {::TriExport::applyBomFilters} message] && $::TriExport::bomFilter eq $previousFilter} "failed save restores active filter configuration"
+rename ::TriExport::saveSettings {}
+rename ::TriExport::originalSaveSettings ::TriExport::saveSettings
+proc ::TriExport::activeDesign {} {return mockDesign}
+proc ::TriExport::enumerateBom {design {filter {}}} {return $::sampleRows}
+set sampleRows [list [dict create ref R1 color 48] [dict create ref U1 color 3]]
+set ::TriExport::bomSampleRef r1
+::TriExport::readBomSampleColor
+check {$::TriExport::bomField eq "Part color" && $::TriExport::bomValue == 48} "sample reference reads exact color case insensitively"
+lappend sampleRows [dict create ref R1 color 3]
+check {[catch {::TriExport::readBomSampleColor} message] && [string match {*different colors*} $message]} "mixed unit colors require another sample"
+set ::TriExport::bomSampleRef missing
+check {[catch {::TriExport::readBomSampleColor} message] && [string match {*not found*} $message]} "unknown color reference is rejected"
+::TriExport::closeBomFilters
 file delete [file join $scratch settings.json]
 puts "PASS: $assertions UI regression assertions; Tk loading intercepted, no windows opened."

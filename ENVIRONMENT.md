@@ -1,6 +1,6 @@
 # 环境要求
 
-适用版本：OrCAD TriExport **1.0.0-rc8**。
+适用版本：OrCAD TriExport **1.0.0-rc9**。
 
 ## 运行安装包
 
@@ -22,7 +22,7 @@ Ghostscript 官方下载：[ghostscript.com/releases/gsdnld.html](https://ghosts
 
 ## 已实测的配置
 
-以下是 2026-11-17 读取并于 2026-11-18 继续验证的配置，不代表所有补丁和系统组合均已验收：
+以下是 2026-11-17 读取并于 2026-11-19 继续验证的配置，不代表所有补丁和系统组合均已验收：
 
 | 项目 | 实际值 |
 | --- | --- |
@@ -32,7 +32,7 @@ Ghostscript 官方下载：[ghostscript.com/releases/gsdnld.html](https://ghosts
 | 打印驱动 | `OrCADPS_17.2` |
 | Ghostscript | 10.08.0，`gswin64c.exe` |
 | 图纸设置 | Original sheet size |
-| 验证结果 | rc6 在 Capture 中完整/选页导出成功；rc8 Allegro/PADS 两种格式均通过原生网表工具及编译程序后台验证（各 31 页与 2 页），未重新执行 Capture 窗口中的打印 |
+| 验证结果 | rc9 通过原生数据库颜色/属性读取及五组双格式 BOM 筛选导出验证；PDF 复用已验证的打印数据，详情见 VALIDATION.md |
 
 EXE 属性未提供更细的 Capture hotfix 编号，不据此推断具体 hotfix。Windows 10、其他驱动名称、A4/A3 强制纸张和其他 Ghostscript 版本尚未完成同等实机验证。
 
@@ -40,9 +40,11 @@ EXE 属性未提供更细的 Capture hotfix 编号，不据此推断具体 hotfi
 
 - 导出前先保存 DSN；检测到未保存修改时停止，插件不会代替用户保存。
 - 每个物理元件须有合法、唯一的位号和 PCB Footprint。合法性由原生网表工具和目标 PCB 软件的封装库约束，Allegro 分支保留原生名称；PADS 分支还要求位号不超过 16 字符、网络名不超过 47 字符且名称符合其 ASCII 规则。插件不会自动猜测封装或静默改名。
-- PDF 只包含勾选页，网表和 BOM 对应完整根设计，不按 CIS 活动装配变体裁剪。
+- PDF 只包含勾选页，网表对应完整根设计，BOM 默认全量，启用规则后筛选；不自动套用 CIS 活动装配变体。
 - Allegro 分支原样保留隐式电源、POWER_GROUP、层次和属性；PADS 分支展开普通隐藏电源脚，拒绝无法确定的 POWER_GROUP 重映射。外部 DSN、特殊层次结构和约束驱动流程未全面验证；报错时不会提交半套结果。
 - 导出期间不要保存新的设计版本；原文件版本变化时会停止提交。
+
+BOM 颜色和自定义属性筛选使用 Capture 17.2 自带数据库接口，无新增运行时依赖。颜色按器件保存的 ColorT ID 匹配，不映射为屏幕颜色名称。
 
 ## 从源码构建
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fnmatch
 import hashlib
 import json
 import locale
@@ -26,7 +27,7 @@ import io
 
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "1.0.0-rc8"
+VERSION = "1.0.0-rc9"
 NETLIST_FORMATS = {"allegro-pst": "_allegro.zip", "pads-v3": ".asc"}
 PADS_ATOM = re.compile(r"^[A-Za-z0-9_~!#$%+=|/.:;<>-]+$")
 ALLEGRO_FILES = {
@@ -333,8 +334,74 @@ def csv_safe(value: str) -> str:
     return "'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
 
-def write_bom(rows: list[dict], footprints: dict, output: Path) -> int:
+BOM_FIELDS = {"ref", "value", "footprint", "part_number", "manufacturer", "description", "dnp", "color", "property"}
+BOM_OPS = {"equals", "not_equals", "contains", "not_contains", "glob", "is_empty", "not_empty"}
+
+
+def validate_bom_filter(config=None) -> dict:
+    if config is None:
+        return {"enabled": False, "include_match": "any", "rules": []}
+    if not isinstance(config, dict) or type(config.get("enabled")) is not bool:
+        raise ExportError("Invalid BOM filter settings. Open BOM Filters and save the rules again.")
+    if config.get("include_match") not in ("any", "all"):
+        raise ExportError("Invalid BOM include match mode.")
+    rules = config.get("rules")
+    if not isinstance(rules, list) or len(rules) > 100:
+        raise ExportError("BOM filters support up to 100 rules.")
+    for rule in rules:
+        if not isinstance(rule, dict) or not all(isinstance(rule.get(k), str) for k in ("action", "field", "op", "value", "property")):
+            raise ExportError("Invalid BOM filter rule.")
+        if rule["action"] not in ("include", "exclude") or rule["field"] not in BOM_FIELDS or rule["op"] not in BOM_OPS:
+            raise ExportError("Unsupported BOM filter action, field or operator.")
+        if rule["field"] == "property" and not rule["property"].strip():
+            raise ExportError("Enter the custom property name for the BOM filter.")
+        if rule["op"] not in ("is_empty", "not_empty") and not rule["value"].strip():
+            raise ExportError("Enter a BOM filter value, or choose is_empty / not_empty.")
+        if rule["field"] == "color" and (rule["op"] not in ("equals", "not_equals") or not re.fullmatch(r"[0-9]+", rule["value"])):
+            raise ExportError("Part color requires equals / not_equals and a numeric Capture color ID.")
+        if any(len(rule[k]) > 1024 for k in ("property", "value")):
+            raise ExportError("BOM filter names and values must be at most 1024 characters.")
+    return config
+
+
+def bom_rule_matches(row: dict, footprint: str, rule: dict) -> bool:
+    field = rule["field"]
+    if field == "footprint":
+        value = footprint
+    elif field == "property":
+        props = row.get("filter_values", {})
+        if not isinstance(props, dict) or rule["property"] not in props:
+            raise ExportError(f"BOM filter property was not captured for {row['ref']}. Restart Capture and export again.")
+        value = props[rule["property"]]
+    elif field == "color":
+        if not re.fullmatch(r"[0-9]+", str(row.get("color", ""))):
+            raise ExportError(f"Could not read the part color for {row['ref']}. No filtered BOM was committed.")
+        value = str(int(row["color"]))
+    else:
+        value = row.get(field, "")
+    value, wanted = str(value).strip().casefold(), rule["value"].strip().casefold()
+    if field == "color":
+        wanted = str(int(wanted))
+    op = rule["op"]
+    if op == "equals":
+        return value == wanted
+    if op == "not_equals":
+        return value != wanted
+    if op == "contains":
+        return wanted in value
+    if op == "not_contains":
+        return wanted not in value
+    if op == "glob":
+        return fnmatch.fnmatchcase(value, wanted)
+    if op == "is_empty":
+        return not value
+    return bool(value)
+
+
+def write_bom(rows: list[dict], footprints: dict, output: Path, config=None, *, audit=None) -> int:
+    config = validate_bom_filter(config)
     physical = {}
+    units = {}
     for row in rows:
         ref = row["ref"]
         if ref not in footprints:
@@ -343,9 +410,28 @@ def write_bom(rows: list[dict], footprints: dict, output: Path) -> int:
         if ref in physical and physical[ref] != values:
             raise ExportError(f"Inconsistent BOM properties across units of {ref}.")
         physical[ref] = values
+        units.setdefault(ref, []).append(row)
     missing = set(footprints) - set(physical)
     if missing:
         raise ExportError("BOM is missing netlist components: " + ", ".join(sorted(missing, key=natural)[:20]))
+    # Validate full-design coverage before intentional filtering. A missing
+    # occurrence must not be mistaken for a component excluded by a rule.
+    excluded = []
+    if config["enabled"]:
+        for ref, occurrences in units.items():
+            includes, excludes = [], []
+            for rule in config["rules"]:
+                # Evaluate every unit to detect unreadable color/property data.
+                matches = [bom_rule_matches(row, footprints[ref], rule) for row in occurrences]
+                (includes if rule["action"] == "include" else excludes).append(any(matches))
+            keep = not includes or (all(includes) if config["include_match"] == "all" else any(includes))
+            if not keep or any(excludes):
+                excluded.append(ref)
+        for ref in excluded:
+            del physical[ref]
+    if audit is not None:
+        audit.update({"total": len(footprints), "included": len(physical), "excluded": len(excluded),
+                      "excluded_refs": sorted(excluded, key=natural)})
     groups = {}
     for ref, values in physical.items():
         key = (values[0], footprints[ref], *values[1:])
@@ -537,6 +623,7 @@ def execute_job(job: dict, job_dir: Path) -> dict:
         raise ExportError("The open export panel is from an older version. Restart Capture to choose a netlist format.")
     if not isinstance(netlist_format, str) or netlist_format not in NETLIST_FORMATS:
         raise ExportError("Unsupported netlist format. Choose Allegro or PADS in the export panel.")
+    bom_filter = validate_bom_filter(job.get("bom_filter"))
     log = job_dir / "diagnostic.log"
     with log.open("a", encoding="utf-8") as stream:
         stream.write(f"Requested netlist format: {netlist_format}\n")
@@ -553,7 +640,10 @@ def execute_job(job: dict, job_dir: Path) -> dict:
         else:
             status(job_dir, "2/4 Generating the PADS netlist and BOM...")
             footprints = convert_pads(pst, netlist)
-        count = write_bom(job["bom_rows"], footprints, bom)
+        bom_audit = {}
+        count = write_bom(job["bom_rows"], footprints, bom, bom_filter, audit=bom_audit)
+        with log.open("a", encoding="utf-8") as stream:
+            stream.write("BOM filter result: " + json.dumps(bom_audit, ensure_ascii=False) + "\n")
         status(job_dir, "3/4 Converting PDF and extracting selected pages...")
         make_pdf(job, stage, pdf, log)
         if file_hash(Path(job["design"])) != job["design_hash"]:
@@ -561,6 +651,7 @@ def execute_job(job: dict, job_dir: Path) -> dict:
         status(job_dir, "4/4 Verifying and committing three files...")
         output = commit_three([netlist, pdf, bom], Path(job["root"]), stem)
         return {"ok": True, "output": str(output), "pages": len(job["selected_pages"]), "parts": count,
+                "netlist_parts": len(footprints), "bom_excluded": bom_audit["excluded"],
                 "netlist_format": netlist_format,
                 "files": [str(output / p.name) for p in (netlist, pdf, bom)]}
 
