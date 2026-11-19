@@ -27,7 +27,7 @@ import io
 
 from pypdf import PdfReader, PdfWriter
 
-VERSION = "1.0.0-rc10"
+VERSION = "1.0.0-rc11"
 NETLIST_FORMATS = {"allegro-pst": "_allegro.zip", "pads-v3": ".asc"}
 PADS_ATOM = re.compile(r"^[A-Za-z0-9_~!#$%+=|/.:;<>-]+$")
 ALLEGRO_FILES = {

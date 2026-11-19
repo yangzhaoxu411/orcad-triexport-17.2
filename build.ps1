@@ -42,7 +42,7 @@ try {
     if ($LASTEXITCODE) { throw 'Worker build failed.' }
     & $Python scripts/assemble_release.py
     if ($LASTEXITCODE) { throw 'Packaging failed.' }
-    $exe = Join-Path $base 'release\OrCAD-TriExport-17.2-1.0.0-rc10\payload\bin\TriExportWorker.exe'
+    $exe = Join-Path $base 'release\OrCAD-TriExport-17.2-1.0.0-rc11\payload\bin\TriExportWorker.exe'
     $resultFile = Join-Path $work 'worker-selftest.json'
     if (Test-Path -LiteralPath $resultFile) { Remove-Item -LiteralPath $resultFile }
     # A windowless helper may return immediately in PowerShell; use -Wait.

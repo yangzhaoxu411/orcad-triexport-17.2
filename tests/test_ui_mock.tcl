@@ -49,7 +49,8 @@ proc widgetCommand {path method args} {
         create {return 1}
         bbox {return {0 0 600 200}}
         state {dict set ::widgets $path lastState $args; return}
-        heading - column {return}
+        heading - column - start - stop {return}
+        exists {return [dict exists $::widgets $path rows [lindex $args 0]]}
         children {if {[dict exists $::widgets $path rows]} {return [dict keys [dict get $::widgets $path rows]]}; return {}}
         insert {set id [lindex $args 3]; dict set ::widgets $path rows $id [lindex $args 5]; return $id}
         delete {dict unset ::widgets $path rows [lindex $args 0]; return}
@@ -57,7 +58,11 @@ proc widgetCommand {path method args} {
             if {[llength $args]} {dict set ::widgets $path selection [lindex $args 1]; return}
             if {[dict exists $::widgets $path selection]} {return [dict get $::widgets $path selection]}; return {}
         }
-        configure - itemconfigure - yview - set {return}
+        configure {
+            foreach {key value} $args {dict set ::widgets $path options $key $value}
+            return
+        }
+        itemconfigure - yview - set {return}
         default {error "unsupported widget method: $method"}
     }
 }
@@ -66,6 +71,9 @@ proc winfo {method path} {
     switch -- $method {
         exists {return [dict exists $::widgets $path]}
         class {return [dict get $::widgets $path class]}
+        reqwidth {return 120}
+        screenwidth {return 1366}
+        screenheight {return 768}
         children {
             set children {}
             dict for {name data} $::widgets {
@@ -88,6 +96,9 @@ proc destroy {path} {
 proc wm {args} { requireTk; lappend ::calls [linsert $args 0 wm] }
 proc raise {args} {requireTk}
 proc pack {args} {requireTk}
+proc grab {args} {requireTk}
+proc focus {args} {requireTk}
+proc button {path args} {widget Button $path {*}$args}
 proc grid {args} {requireTk}
 set bindings {}
 proc bind {path event command} {requireTk; dict set ::bindings $path $event $command}
@@ -95,7 +106,8 @@ proc tk_messageBox {args} {requireTk; lappend ::messages $args}
 proc toplevel {path args} {widget Toplevel $path {*}$args}
 proc canvas {path args} {widget Canvas $path {*}$args}
 namespace eval ::ttk {}
-foreach {name class} {frame TFrame label TLabel button TButton entry TEntry checkbutton TCheckbutton scrollbar TScrollbar combobox TCombobox treeview Treeview} {
+proc ttk::style {args} {requireTk}
+foreach {name class} {frame TFrame label TLabel button TButton entry TEntry checkbutton TCheckbutton scrollbar TScrollbar combobox TCombobox treeview Treeview radiobutton TRadiobutton progressbar TProgressbar} {
     interp alias {} ::ttk::$name {} widget $class
 }
 proc ::TriExport::activeDesign {} {return mockDesign}
@@ -111,7 +123,7 @@ proc RefreshMenu {} {}
 ::TriExport::init [file join $scratch mock-cadence]
 check {!$tkLoaded} "autoload does not create windows"
 foreach menu $menus {
-    check {[regexp {[\u4e00-\u9fff]} $menu]} "native menu labels are Chinese Unicode"
+    check {![regexp {[^\x00-\x7f]} $menu]} "native Capture menu stays ASCII to avoid encoding damage"
 }
 set popup [lindex $menus 0 3]
 check {[lindex $popup 3] eq "TriExportEnable"} "opening popup does not invoke export dialog"
@@ -120,99 +132,119 @@ set callback [dict get $actions $run]
 check {$callback eq "::TriExport::openAction"} "menu child is wired to the open action"
 set result [$callback]
 check {$result eq "true" && [winfo exists .triExport.bottom.export]} "menu callback builds a complete dialog"
-check {[string match "\u7f51\u8868*" [dict get $widgets .triExport.top.title options -text]]} "heading supports either netlist format"
-check {[string match "*Allegro*\u89e3\u538b*" $::TriExport::formatNote]} "default UI explains netlist ZIP extraction"
-set formatOptions [dict get $widgets .triExport.format.choice options]
-check {[dict get $formatOptions -state] eq "readonly"} "format choices cannot be typed arbitrarily"
-check {[dict get $formatOptions -values] eq {{Allegro (ZIP)} {PADS PowerPCB V3 (ASC)}}} "both output formats are available"
-check {[dict get $formatOptions -textvariable] eq "::TriExport::netlistFormat"} "dropdown edits the export format"
-check {[::TriExport::netlistFormatId] eq "allegro-pst"} "fresh default remains Allegro"
-set formatCallback [dict get $bindings .triExport.format.choice <<ComboboxSelected>>]
-set ::TriExport::netlistFormat "PADS PowerPCB V3 (ASC)"
-eval $formatCallback
-check {[string match {*PADS PowerPCB V3 ASC*} $::TriExport::formatNote]} "PADS selection updates output guidance"
-check {[dict get [::json::json2dict [::TriExport::readUtf8 [file join $scratch settings.json]]] netlist_format] eq "pads-v3"} "selection event persists the stable PADS ID"
-set ::TriExport::netlistFormat "Allegro (ZIP)"
-::TriExport::loadSettings
-check {[::TriExport::netlistFormatId] eq "pads-v3"} "PADS choice survives loading saved settings"
-::TriExport::setControls .triExport 1
-check {[dict get $widgets .triExport.format.choice lastState] eq "disabled"} "format cannot change during export"
-::TriExport::setControls .triExport 0
-check {[dict get $widgets .triExport.format.choice lastState] eq "!disabled"} "format control restored after export"
-set ::TriExport::netlistFormat "Allegro (ZIP)"
-eval $formatCallback
-check {[string match "*Allegro*\u89e3\u538b*" $::TriExport::formatNote]} "switching back restores ZIP guidance"
-set ::TriExport::netlistFormat "PADS PowerPCB V3 (ASC)"
-::TriExport::loadSettings
-check {[::TriExport::netlistFormatId] eq "allegro-pst"} "Allegro choice survives loading saved settings"
-check {$tkLoads == 1} "Tk loaded before window commands"
-check {[lsearch -exact $calls {wm withdraw .}] >= 0} "only newly loaded Tk root is hidden"
-set options [dict get $widgets .triExport.options.paper options]
-set values [dict get $options -values]
-check {[llength $values] == 3 && [lindex $values 0] eq "\u539f\u56fe\u7eb8\u5c3a\u5bf8"} "paper labels remain three choices"
-check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 3 / 3 \u9875"} "page selection initialized"
-set clear [dict get [dict get $widgets .triExport.pageTools.none options] -command]
-eval $clear
-check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 0 / 3 \u9875"} "clear all button works"
-set all [dict get [dict get $widgets .triExport.pageTools.all options] -command]
-eval $all
-check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 3 / 3 \u9875"} "select all button works"
-set openBom [dict get $widgets .triExport.bom.settings options -command]
-eval $openBom
-check {[winfo exists .triExport.bomFilters.rules]} "BOM settings opens a rule editor"
 
-check {$::TriExport::ui_bomAction eq "\u6392\u9664"} "BOM action initially shows Chinese"
+check {[dict get $widgets .triExport.header.brand options -text] eq "TriExport"} "brand remains English"
+check {[lsearch -exact $calls [list wm title .triExport "TriExport $::TriExport::version - OrCAD 17.2"]] >= 0} "window title remains English"
+set main .triExport.body.content
+set format $main.overview.format
+set pdf $main.pdf
+set bom $main.bom
+foreach name {overview pdf bom environment} {
+    check {[winfo exists $main.$name]} "workspace contains $name"
+}
+check {$::TriExport::view eq "overview"} "open starts on overview"
+set formatCallback [dict get $widgets $format.pads.choice options -command]
+check {[dict get $widgets $format.pads.choice options -value] eq "PADS PowerPCB V3 (ASC)"} "PADS radio selects supported format"
+check {[::TriExport::netlistFormatId] eq "allegro-pst"} "default format is Allegro"
+set ::TriExport::netlistFormat "PADS PowerPCB V3 (ASC)"
+eval $formatCallback
+check {[string match {*design.asc*} $::TriExport::outputNames]} "format updates output example"
+check {[dict get [::json::json2dict [::TriExport::readUtf8 [file join $scratch settings.json]]] netlist_format] eq "pads-v3"} "format saves stable ID"
+set ::TriExport::netlistFormat "Allegro (ZIP)"
+::TriExport::loadSettings
+check {[::TriExport::netlistFormatId] eq "pads-v3"} "format persists"
+::TriExport::setControls .triExport 1
+check {[dict get $widgets $format.pads.choice lastState] eq "disabled"} "radios freeze during export"
+check {[dict get $widgets .triExport.body.nav.bom options -state] eq "disabled"} "navigation freezes"
+::TriExport::setControls .triExport 0
+check {[dict get $widgets $format.pads.choice lastState] eq "!disabled"} "radios restore after export"
+check {[dict get $widgets .triExport.bottom.open lastState] eq "disabled"} "output button disabled before a successful export"
+check {[dict get $widgets $bom.actions.edit lastState] eq "disabled"} "editing requires selected rule"
+set ::TriExport::netlistFormat "Allegro (ZIP)"
+eval $formatCallback
+check {$tkLoads == 1} "Tk loads before widget use"
+check {[lsearch -exact $calls {wm withdraw .}] >= 0} "new Tk root hidden"
+set values [dict get $widgets $pdf.paper.choice options -values]
+check {[llength $values] == 3 && [lindex $values 0] eq "\u539f\u56fe\u7eb8\u5c3a\u5bf8"} "paper choices translated"
+check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 3 / 3 \u9875"} "all pages initially selected"
+eval [dict get $widgets $pdf.selection.none options -command]
+check {$::TriExport::checked(0) == 0 && $::TriExport::checked(2) == 0} "clear pages works"
+set ::TriExport::pageQuery page2
+::TriExport::renderPageList
+eval [dict get $widgets $pdf.selection.all options -command]
+check {$::TriExport::checked(1) && !$::TriExport::checked(0) && !$::TriExport::checked(2)} "search select only changes visible pages"
+set ::TriExport::pageQuery missing
+::TriExport::renderPageList
+check {[winfo exists $pdf.list.canvas.items.empty]} "empty search provides feedback"
+::TriExport::refreshPages
+check {$::TriExport::checked(1) && !$::TriExport::checked(0)} "refresh preserves selections for the same design"
+set ::TriExport::pageQuery ""
+::TriExport::renderPageList
+::TriExport::selectAll 1
+set ::TriExport::root [file join $scratch no-such-folder]
+::TriExport::start
+check {!$::TriExport::busy && $::TriExport::view eq "overview"} "invalid folder routes to overview without starting job"
+set ::TriExport::root $scratch
+::TriExport::selectAll 0
+::TriExport::start
+check {$::TriExport::view eq "pdf"} "no PDF pages routes to page selection"
+::TriExport::selectAll 1
+eval [dict get $widgets $main.overview.scope.bom.edit options -command]
+check {$::TriExport::view eq "bom"} "overview links to BOM panel"
+eval [dict get $widgets $bom.quick.property options -command]
+set editor .triExport.bomRule
+check {[winfo exists $editor.form.property]} "property shortcut opens one-rule editor"
+check {$::TriExport::bomField eq "Custom property"} "property shortcut preselects field"
+check {$::TriExport::ui_bomAction eq "\u6392\u9664"} "actions show Chinese"
 set ::TriExport::ui_bomAction "\u7eb3\u5165"
-check {$::TriExport::bomAction eq "include"} "Chinese include selection uses stable ID"
+check {$::TriExport::bomAction eq "include"} "localized choices preserve stable IDs"
 set ::TriExport::ui_bomOperator "\u901a\u914d\u5339\u914d"
-check {$::TriExport::bomOperator eq "glob"} "Chinese wildcard choice uses stable operator"
-set ::TriExport::ui_bomIncludeMatch "\u5168\u90e8\u6ee1\u8db3"
-check {$::TriExport::bomIncludeMatch eq "all"} "Chinese all selection uses stable match mode"
-set ::TriExport::bomAction exclude
-check {$::TriExport::ui_bomAction eq "\u6392\u9664"} "programmatic reset refreshes Chinese display"
-set ::TriExport::ui_bomField "\u81ea\u5b9a\u4e49\u5c5e\u6027"
-check {$::TriExport::bomField eq "Custom property"} "Chinese field resolves to existing field mapping"
+check {$::TriExport::bomOperator eq "glob"} "localized operator preserves stable ID"
 set ::TriExport::ui_paper "A4 \u6a2a\u5411"
-check {$::TriExport::paper eq "A4 landscape"} "Chinese paper choice preserves print backend value"
 ::TriExport::saveSettings
 set savedSettings [::json::json2dict [::TriExport::readUtf8 [file join $scratch settings.json]]]
-check {[dict get $savedSettings paper] eq "A4 landscape"} "paper persists in backward-compatible format"
+check {[dict get $savedSettings paper] eq "A4 landscape"} "paper persists in old compatible format"
 set ::TriExport::paper "Original sheet size"
 ::TriExport::loadSettings
-check {$::TriExport::ui_paper eq "A4 \u6a2a\u5411"} "loading legacy paper value restores Chinese display"
+check {$::TriExport::ui_paper eq "A4 \u6a2a\u5411"} "legacy paper restores Chinese display"
 set ::TriExport::paper "Original sheet size"
-
-set ::TriExport::bomField "DNP / DNI"
-set ::TriExport::bomOperator equals
-set ::TriExport::bomValue YES
-eval [dict get $widgets .triExport.bomFilters.actions.add options -command]
-check {[llength $::TriExport::bomRules] == 1 && $::TriExport::bomEnabled} "Add rule enables draft filtering"
-.triExport.bomFilters.rules selection set r0
-::TriExport::selectBomRule
-set ::TriExport::bomValue DNI
-eval [dict get $widgets .triExport.bomFilters.actions.update options -command]
-check {[dict get [lindex $::TriExport::bomRules 0] value] eq "DNI"} "selected rule can be updated"
-eval [dict get $widgets .triExport.bomFilters.bottom.cancel options -command]
-check {![dict get $::TriExport::bomFilter enabled]} "Cancel discards draft rules"
-eval $openBom
-set ::TriExport::bomField "Custom property"
+eval [dict get $widgets $editor.bottom.cancel options -command]
+check {![dict get $::TriExport::bomFilter enabled]} "cancel discards new rule"
+::TriExport::showBomRule -1 "Custom property"
+::TriExport::bomEditorAction ::TriExport::saveBomRule
+check {[winfo exists $editor] && $::TriExport::bomRuleError ne ""} "invalid rule stays open with inline error"
 set ::TriExport::bomProperty {Assembly Status}
 set ::TriExport::bomValue {Not fitted}
-eval [dict get $widgets .triExport.bomFilters.actions.add options -command]
-eval [dict get $widgets .triExport.bomFilters.bottom.save options -command]
-check {[dict get $::TriExport::bomFilter enabled] && [llength [dict get $::TriExport::bomFilter rules]] == 1} "Save applies BOM rules"
-check {[string match "*1 \u6761\u89c4\u5219*" $::TriExport::bomSummary]} "main panel shows active filtering"
+eval [dict get $widgets $editor.bottom.save options -command]
+check {![winfo exists $editor] && [dict get $::TriExport::bomFilter enabled]} "one save activates rule and closes editor"
+check {[llength [dict get $::TriExport::bomFilter rules]] == 1} "one save creates exactly one rule"
+$bom.list.rules selection set r0
+eval [dict get $widgets $bom.actions.edit options -command]
+set ::TriExport::bomValue Changed
+eval [dict get $widgets $editor.bottom.cancel options -command]
+check {[dict get [lindex [dict get $::TriExport::bomFilter rules] 0] value] eq "Not fitted"} "cancel edit preserves original rule"
+::TriExport::editSelectedBomRule
+set ::TriExport::bomValue Changed
+::TriExport::saveBomRule
+check {[dict get [lindex [dict get $::TriExport::bomFilter rules] 0] value] eq "Changed"} "edit updates selected rule"
 set ::TriExport::bomFilter [::TriExport::defaultBomFilter]
 ::TriExport::loadSettings
-check {[dict get [lindex [dict get $::TriExport::bomFilter rules] 0] property] eq "Assembly Status"} "custom rule persists through settings reload"
-eval $openBom
-.triExport.bomFilters.rules selection set r0
-::TriExport::selectBomRule
-eval [dict get $widgets .triExport.bomFilters.actions.remove options -command]
-check {[llength $::TriExport::bomRules] == 0} "Remove deletes the selected rule"
+check {[dict get [lindex [dict get $::TriExport::bomFilter rules] 0] value] eq "Changed"} "edited rule survives reload"
 set ::TriExport::bomEnabled 0
-eval [dict get $widgets .triExport.bomFilters.bottom.save options -command]
-check {$::TriExport::bomSummary eq "BOM\uff1a\u5bfc\u51fa\u5168\u90e8\u5668\u4ef6"} "disabling rules restores all-components summary"
+::TriExport::bomModeChanged
+check {![dict get $::TriExport::bomFilter enabled] && [llength [dict get $::TriExport::bomFilter rules]] == 1} "all-components mode retains inactive rules"
+::TriExport::showBomRule -1 "Part color"
+check {[llength [dict get $widgets $editor.form.op options -values]] == 2} "color offers only valid operators"
+check {[dict get $widgets $editor.form.value options -state] eq "readonly"} "color ID read rather than guessed"
+set ::TriExport::bomField "Custom property"
+::TriExport::bomFieldChanged
+set ::TriExport::bomOperator is_empty
+::TriExport::bomFieldChanged
+check {[dict get $widgets $editor.form.value options -state] eq "normal"} "text fields restore editable value"
+::TriExport::closeBomRule
+$bom.list.rules selection set r0
+::TriExport::removeBomRule
+check {![llength [dict get $::TriExport::bomFilter rules]] && !$::TriExport::bomEnabled} "last rule removal restores all components"
 set before [dict size $widgets]
 dict for {path item} $widgets {
     set options [dict get $item options]
@@ -226,7 +258,7 @@ $callback
 check {[dict size $widgets] == $before} "repeat click raises existing dialog"
 check {[llength $messages] == 0} "normal open shows no error"
 ::TriExport::closeWindow
-set failWidget .triExport.location
+set failWidget .triExport.body.content.overview.destination
 $callback
 check {![winfo exists .triExport]} "failed build removes partial dialog"
 check {[string match {*widget construction failure*} [lindex $messages end]]} "original error is reported"
@@ -331,14 +363,14 @@ rename ::exec {}
 rename ::realExec ::exec
 rename ::after {}
 rename ::realAfter ::after
-toplevel .triExport
-::TriExport::showBomFilters
-check {[catch {::TriExport::prepareJob} message] && [string match {*Save or cancel BOM Filters*} $message]} "open rule editor blocks export of unsaved rules"
+::TriExport::buildDialog
+::TriExport::showBomRule
+check {[catch {::TriExport::prepareJob} message] && [string match {*Finish or cancel the current BOM rule*} $message]} "open rule editor blocks export of unsaved rules"
 set previousFilter $::TriExport::bomFilter
 set ::TriExport::bomEnabled 1
 rename ::TriExport::saveSettings ::TriExport::originalSaveSettings
 proc ::TriExport::saveSettings {} {error "injected settings write failure"}
-check {[catch {::TriExport::applyBomFilters} message] && $::TriExport::bomFilter eq $previousFilter} "failed save restores active filter configuration"
+check {[catch {::TriExport::commitBomConfig [dict replace $previousFilter enabled 1]} message] && $::TriExport::bomFilter eq $previousFilter} "failed save restores active filter configuration"
 rename ::TriExport::saveSettings {}
 rename ::TriExport::originalSaveSettings ::TriExport::saveSettings
 proc ::TriExport::activeDesign {} {return mockDesign}
@@ -347,10 +379,24 @@ set sampleRows [list [dict create ref R1 color 48] [dict create ref U1 color 3]]
 set ::TriExport::bomSampleRef r1
 ::TriExport::readBomSampleColor
 check {$::TriExport::bomField eq "Part color" && $::TriExport::bomValue == 48} "sample reference reads exact color case insensitively"
+set ::TriExport::bomOperator not_equals
+::TriExport::readBomSampleColor
+check {$::TriExport::bomOperator eq "not_equals"} "reading a sample preserves the chosen color comparison"
 lappend sampleRows [dict create ref R1 color 3]
 check {[catch {::TriExport::readBomSampleColor} message] && [string match {*different colors*} $message]} "mixed unit colors require another sample"
 set ::TriExport::bomSampleRef missing
 check {[catch {::TriExport::readBomSampleColor} message] && [string match {*not found*} $message]} "unknown color reference is rejected"
-::TriExport::closeBomFilters
+::TriExport::closeBomRule
+rename mockMessageBoxDisabled tk_messageBox
+set ::TriExport::jobDir [file join $scratch successful-job]
+file mkdir $::TriExport::jobDir
+set ::TriExport::workerChannel ""
+set ::TriExport::busy 1
+::TriExport::setControls .triExport 1
+::TriExport::writeUtf8 [file join $::TriExport::jobDir result.json] [::TriExport::jsonObject [dict create ok true output $scratch pages 2 parts 5 bom_excluded 1 netlist_parts 6]]
+::TriExport::poll
+check {!$::TriExport::busy && $::TriExport::lastOutput eq $scratch} "success stores the actual output path and leaves busy state"
+check {[dict get $widgets .triExport.bottom.open lastState] eq "!disabled"} "success enables open output folder"
+check {[string first "\u5df2\u5bfc\u51fa 2" $::TriExport::statusText] == 0} "success shows page and component counts in Chinese"
 file delete [file join $scratch settings.json]
 puts "PASS: $assertions UI regression assertions; Tk loading intercepted, no windows opened."

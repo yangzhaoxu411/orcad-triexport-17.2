@@ -75,3 +75,16 @@ proc ::TriExport::showMessage {args} {
     if {[dict exists $opts -title]} { dict set opts -title [tr [dict get $opts -title]] }
     return [::tk_messageBox {*}$opts]
 }
+proc ::TriExport::setChoiceOptions {path internal values} {
+    set labels {}
+    set reverse [dict create]
+    foreach value $values {
+        set label [tr $value]
+        lappend labels $label
+        dict set reverse $label $value
+    }
+    dict set ::TriExport::choiceMaps $internal $reverse
+    $path configure -values $labels
+    set ui ::TriExport::ui_[namespace tail $internal]
+    set $ui [tr [set $internal]]
+}

@@ -23,7 +23,7 @@ try {
         check {[string first "\u5df2\u5bfc\u51fa 2" [::TriExport::tr {Exported 2 PDF pages and 17 BOM components to three files.}]] == 0} "success text is translated with counts"
     }
 } finally {encoding system $savedEncoding}
-foreach name {TriExport.tcl BomFilters.tcl UiLocale.tcl ZhCN.tcl zzTriExport.tcl} {
+foreach name {TriExport.tcl WorkspaceUI.tcl BomFilters.tcl UiLocale.tcl ZhCN.tcl zzTriExport.tcl} {
     set f [open [file join $base src $name] rb];set raw [read $f];close $f
     check {![regexp {[^\x00-\x7f]} $raw]} "runtime $name is ASCII with escaped Unicode catalog"
 }

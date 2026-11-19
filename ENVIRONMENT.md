@@ -1,6 +1,6 @@
 # 环境要求
 
-适用版本：OrCAD TriExport **1.0.0-rc10**。
+适用版本：OrCAD TriExport **1.0.0-rc11**。
 
 ## 运行安装包
 
