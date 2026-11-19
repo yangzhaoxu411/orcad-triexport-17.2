@@ -1,0 +1,386 @@
+{
+  "exact": {
+    "TriExport": "TriExport 三文件导出",
+    "TriE&xport": "三文件导出(&X)",
+    "Export Files...": "导出文件…",
+    "Export Files": "开始导出",
+    "Export complete": "导出完成",
+    "Export failed": "导出失败",
+    "Select pages and export netlist, PDF and BOM": "选择原理图页并导出网表、PDF 和 BOM",
+    "Netlist  /  Schematic PDF  /  BOM": "网表 / 原理图 PDF / BOM 物料表",
+    "Output root folder": "导出根目录",
+    "Browse...": "浏览…",
+    "Netlist format": "网表格式",
+    "BOM Filters...": "BOM 器件筛选…",
+    "BOM Filters": "BOM 器件筛选",
+    "BOM Filters - TriExport": "BOM 器件筛选 - TriExport",
+    "PDF pages (multiple selection)": "PDF 页面（可多选）",
+    "Select all": "全选",
+    "Clear all": "全不选",
+    "Refresh": "刷新",
+    "PDF print driver": "PDF 打印驱动",
+    "Close": "关闭",
+    "Cancel": "取消",
+    "Save filters": "保存筛选规则",
+    "Choose output root folder": "选择导出根目录",
+    "Select gswin64c.exe or gswin32c.exe": "选择 gswin64c.exe 或 gswin32c.exe",
+    "Original sheet size": "原图纸尺寸",
+    "A4 landscape": "A4 横向",
+    "A3 landscape": "A3 横向",
+    "Enable BOM filters": "启用 BOM 筛选",
+    "Include rules match": "纳入规则匹配方式",
+    "any": "满足任一",
+    "all": "全部满足",
+    "Action": "操作",
+    "Field": "字段",
+    "Operator": "条件",
+    "Value": "值",
+    "Reference": "位号",
+    "PCB Footprint": "PCB 封装",
+    "Part Number": "器件料号",
+    "Manufacturer": "制造商",
+    "Description": "描述",
+    "DNP / DNI": "不装属性（DNP / DNI）",
+    "Part color": "器件颜色",
+    "Custom property": "自定义属性",
+    "Custom property name": "自定义属性名称",
+    "Value / wildcard pattern": "值 / 通配表达式",
+    "exclude": "排除",
+    "include": "纳入",
+    "equals": "等于",
+    "not_equals": "不等于",
+    "contains": "包含",
+    "not_contains": "不包含",
+    "glob": "通配匹配",
+    "is_empty": "为空",
+    "not_empty": "非空",
+    "Add rule": "添加规则",
+    "Update selected": "更新选中规则",
+    "Remove selected": "删除选中规则",
+    "Clear input": "清空输入",
+    "Color sample reference": "参考器件位号",
+    "Read color": "读取颜色",
+    "BOM: all components": "BOM：导出全部器件",
+    "BOM: settings need correction": "BOM：请修正筛选设置",
+    "Exclusions always win. No include rules = include all. Text matches ignore case and outer spaces.\nRules match any unit of a physical component. Filtering affects BOM only; netlist and PDF are unchanged.": "排除规则优先；没有纳入规则时默认纳入全部器件。文本匹配忽略大小写及首尾空格。\n每条规则命中器件任一单元即生效；筛选仅影响 BOM，网表和 PDF 不受影响。",
+    "Part color uses Capture's stored color ID. Enter a same-color reference and click Read color, then Add rule.\nSelection highlights, pin/text colors and a custom Color property are separate from the part color.": "输入同颜色器件的位号，点击“读取颜色”，再点击“添加规则”。匹配器件保存的颜色编号。\n选中高亮、引脚/文字颜色不参与匹配；名为 Color 的自定义属性请使用“自定义属性”规则。",
+    "Output: Allegro netlist ZIP, PDF and BOM CSV. Unzip the netlist before importing into Allegro. Page selection applies to PDF only.": "输出 Allegro 网表 ZIP、PDF 和 BOM CSV。导入 Allegro 前请解压网表；页面选择仅影响 PDF。",
+    "Output: PADS PowerPCB V3 ASC, PDF and BOM CSV. PADS naming and power-mapping limits apply. Page selection applies to PDF only.": "输出 PADS PowerPCB V3 ASC、PDF 和 BOM CSV。须符合 PADS 名称及电源映射要求；页面选择仅影响 PDF。",
+    "Choose an output folder and PDF pages.": "请选择导出目录及 PDF 页面。",
+    "Checking the design and export dependencies...": "正在检查设计及导出环境…",
+    "Reading the BOM for the full design...": "正在读取完整设计的 BOM…",
+    "Printing schematics to PostScript. Please wait...": "正在将原理图打印为 PostScript，请稍候…",
+    "Generating the netlist, PDF and BOM...": "正在生成网表、PDF 和 BOM…",
+    "Export failed. No results were committed.": "导出失败，未提交结果文件。",
+    "1/4 Running the Cadence netlister...": "1/4 正在运行 Cadence 网表工具…",
+    "2/4 Packaging the Allegro netlist and BOM...": "2/4 正在打包 Allegro 网表及生成 BOM…",
+    "2/4 Generating the PADS netlist and BOM...": "2/4 正在生成 PADS 网表及 BOM…",
+    "3/4 Converting PDF and extracting selected pages...": "3/4 正在转换 PDF 并提取所选页面…",
+    "4/4 Verifying and committing three files...": "4/4 正在核验并提交三个文件…",
+    "Export complete.": "导出完成。",
+    "Export failed. No results committed.": "导出失败，未提交结果文件。",
+    "Could not save the selected format": "无法保存所选网表格式",
+    "Could not open the export window": "无法打开导出窗口",
+    "Could not load the menu": "无法加载菜单",
+    "LOCALAPPDATA is not available.": "无法取得 LOCALAPPDATA 目录。",
+    "Could not read saved settings. Open BOM Filters and save the corrected settings.": "无法读取已保存的设置，请打开“BOM 器件筛选”修正并保存。",
+    "Choose Allegro or PADS from Netlist format.": "请在“网表格式”中选择 Allegro 或 PADS。",
+    "Open a project and select the design in Project Manager first.": "请先打开工程，并在工程管理器中选中设计。",
+    "Could not check whether the design is saved.": "无法检查设计的保存状态。",
+    "The design has unsaved changes. Save it before exporting.": "设计有未保存的修改，请先保存再导出。",
+    "Save the design as a DSN file first.": "请先将设计保存为 DSN 文件。",
+    "Could not enumerate schematics.": "无法获取原理图列表。",
+    "Could not read a schematic.": "无法读取原理图。",
+    "Could not read the schematic view.": "无法读取原理图视图。",
+    "Could not enumerate schematic pages.": "无法获取原理图页面列表。",
+    "Could not read a schematic page.": "无法读取原理图页面。",
+    "The active design has no schematic pages to export.": "当前设计没有可导出的原理图页面。",
+    "Hierarchy exceeds 128 levels. Check for recursive references.": "层次超过 128 级，请检查是否存在递归引用。",
+    "Could not enumerate component occurrences.": "无法获取器件实例列表。",
+    "Could not read a component occurrence.": "无法读取器件实例。",
+    "Could not convert a component occurrence.": "无法转换器件实例。",
+    "Could not read the component type.": "无法读取器件类型。",
+    "The active design has no valid root occurrence.": "当前设计没有有效的根实例。",
+    "The active design changed before PDF printing. Refresh the page list.": "PDF 打印前活动设计发生变化，请刷新页面列表。",
+    "Capture PDF initialization found no active design. Select the DSN in Project Manager and retry.": "Capture 初始化 PDF 时未找到活动设计，请在工程管理器中选中 DSN 后重试。",
+    "Capture printed outside the temporary directory. Export stopped.": "Capture 输出超出了临时目录，已停止导出。",
+    "Tk loaded without ttk support.": "Tk 已加载，但缺少 ttk 界面组件。",
+    "Save or cancel BOM Filters before exporting.": "请先保存或取消 BOM 筛选，再开始导出。",
+    "Select at least one schematic page.": "请至少选择一页原理图。",
+    "Choose an existing output root folder.": "请选择已存在的导出根目录。",
+    "The export worker is missing. Reinstall TriExport.": "缺少导出程序，请重新安装 TriExport。",
+    "Could not find the Capture 17.2 netlister.": "找不到 Capture 17.2 网表工具。",
+    "Select gswin64c.exe or gswin32c.exe from the Ghostscript bin folder, not the installer.": "请选择 Ghostscript 的 bin 目录中的 gswin64c.exe 或 gswin32c.exe，不要选择安装程序。",
+    "The active design changed. Refresh the page list first.": "活动设计已改变，请先刷新页面列表。",
+    "The schematic pages changed. Refresh the page list first.": "原理图页面已改变，请先刷新页面列表。",
+    "Could not verify the design file revision.": "无法校验设计文件版本。",
+    "Invalid BOM filter enable setting.": "BOM 筛选启用设置无效。",
+    "Choose any or all for include rules.": "请选择纳入规则满足任一或全部满足。",
+    "BOM filters support up to 100 rules.": "BOM 筛选最多支持 100 条规则。",
+    "Choose include or exclude.": "请选择“纳入”或“排除”。",
+    "Unknown BOM field.": "未知的 BOM 字段。",
+    "Unknown BOM operator.": "未知的 BOM 匹配条件。",
+    "Enter a custom property name.": "请输入自定义属性名称。",
+    "Enter a value, or choose is_empty / not_empty.": "请输入匹配值，或选择“为空 / 非空”。",
+    "Part color requires equals / not_equals and a numeric color ID. Use Read color from a reference.": "器件颜色仅支持“等于 / 不等于”和数字颜色编号，请通过参考位号“读取颜色”。",
+    "BOM filter names and values must be at most 1024 characters.": "BOM 属性名称及匹配值不能超过 1024 个字符。",
+    "Could not read the schematic part for its color.": "无法读取器件以获取颜色。",
+    "Could not read the stored part color.": "无法读取器件保存的颜色。",
+    "Select a rule to update.": "请选择要更新的规则。",
+    "Select a rule to remove.": "请选择要删除的规则。",
+    "Enter a reference of the color to match, for example R1.": "请输入目标颜色的参考器件位号，例如 R1。",
+    "The active design changed. Close BOM Filters and refresh the page list.": "活动设计已改变，请关闭 BOM 筛选并刷新页面列表。",
+    "Invalid BOM filter settings. Open BOM Filters and save the rules again.": "BOM 筛选设置无效，请打开“BOM 器件筛选”重新保存规则。",
+    "Invalid BOM include match mode.": "BOM 纳入规则匹配方式无效。",
+    "Invalid BOM filter rule.": "BOM 筛选规则无效。",
+    "Unsupported BOM filter action, field or operator.": "不支持此 BOM 筛选操作、字段或条件。",
+    "Enter the custom property name for the BOM filter.": "请输入 BOM 筛选的自定义属性名称。",
+    "Enter a BOM filter value, or choose is_empty / not_empty.": "请输入 BOM 匹配值，或选择“为空 / 非空”。",
+    "Part color requires equals / not_equals and a numeric Capture color ID.": "器件颜色仅支持“等于 / 不等于”和 Capture 数字颜色编号。",
+    "The open export panel is from an older version. Restart Capture to choose a netlist format.": "当前导出面板来自旧版本，请重启 Capture 后选择网表格式。",
+    "Unsupported netlist format. Choose Allegro or PADS in the export panel.": "不支持此网表格式，请在导出面板选择 Allegro 或 PADS。",
+    "The design was saved as a new revision during export. Export again.": "导出期间设计被保存为新版本，请重新导出。",
+    "The source DSN changed during netlisting. No results committed.": "生成网表期间源 DSN 发生变化，未提交结果文件。",
+    "PostScript page count does not match Capture callbacks. Cannot safely select PDF pages.": "PostScript 页数与 Capture 页面回调不一致，无法准确提取 PDF 页面。",
+    "PDF page count verification failed.": "PDF 页数校验失败。",
+    "Invalid PDF page dimensions.": "PDF 页面尺寸无效。",
+    "Commit requires exactly three files: one netlist (.zip or .asc), .pdf and .csv.": "提交必须恰好包含三个文件：网表（ZIP 或 ASC）、PDF 和 CSV。",
+    "An output file is missing or empty.": "输出文件缺失或为空。",
+    "The output root folder does not exist.": "导出根目录不存在。",
+    "Output file count verification failed.": "输出文件数量校验失败。",
+    "Output copy verification failed.": "输出文件复制校验失败。",
+    "Too many output folder name collisions. Choose another root folder.": "输出目录名称重复次数过多，请更换根目录。",
+    "Error details:": "错误详细信息：",
+    "Invalid localized selection.": "界面选项无效，请重新选择。",
+    "See startup-error.log in LocalAppData/OrCADTriExport/data-17.2.": "详细信息见 LocalAppData/OrCADTriExport/data-17.2/startup-error.log。",
+    "Diagnostics:": "诊断目录：",
+    "Log:": "日志：",
+    "Export did not complete:": "导出未完成：",
+    "Could not read the export result:": "无法读取导出结果：",
+    "Unterminated PST comment.": "PST 注释未结束。",
+    "Unterminated PST string.": "PST 字符串未结束。",
+    "The primitive record has no component name.": "原语记录缺少器件名称。",
+    "No physical component definitions in the netlist.": "网表没有物理器件定义。",
+    "Incomplete PART_NAME record.": "PART_NAME 记录不完整。",
+    "PART_NAME record has no referenced primitive.": "PART_NAME 记录未引用器件原语。",
+    "No PCB components to export.": "没有可导出的 PCB 器件。",
+    "NET_NAME record has no net name.": "NET_NAME 记录缺少网络名称。",
+    "Incomplete NODE_NAME record.": "NODE_NAME 记录不完整。",
+    "NODE_NAME record has an empty reference or pin.": "NODE_NAME 记录的位号或引脚为空。",
+    "Allegro netlist ZIP verification failed.": "Allegro 网表 ZIP 校验失败。",
+    "Allegro netlist bytes changed during packaging.": "Allegro 原生网表内容在打包期间发生变化。",
+    "Parts contain POWER_GROUP remapping, which this version cannot infer.": "器件包含本版本无法推断的 POWER_GROUP 重映射。",
+    "The design file changed during preparation. Export again.": "准备导出时设计文件已改变，请重新导出。",
+    "The design changed while making the export snapshot. Export again.": "创建设计导出副本时原设计已改变，请重新导出。",
+    "Could not find pstswp.exe / allegro.cfg in the 17.2 installation.": "在 17.2 安装目录中找不到 pstswp.exe / allegro.cfg。",
+    "Save the active design as a .DSN file first.": "请先将活动设计保存为 .DSN 文件。",
+    "Cadence reported a netlisting error. See the diagnostic log and correct the schematic.": "Cadence 报告网表错误，请查看诊断日志并修正原理图。",
+    "Print callback pages do not match the PDF. Export stopped to prevent incorrect pages.": "打印回调页面与 PDF 不一致，为避免导出错误页面已停止。",
+    "Some selected pages are missing from the print output. Refresh the page list.": "打印结果中缺少部分所选页面，请刷新页面列表。",
+    "Select Ghostscript gswin64c.exe / gswin32c.exe, not its installer.": "请选择 Ghostscript 的 gswin64c.exe / gswin32c.exe，不要选择安装器。",
+    "PDF runtime self-test failed": "PDF 运行时自检失败",
+    "Capture submitted PostScript twice with different paths.": "Capture 两次提交的 PostScript 路径不同。"
+  },
+  "patterns": [
+    [
+      "^TriExport (.+) - OrCAD 17\\.2$",
+      "TriExport {0} - OrCAD 17.2 三文件导出"
+    ],
+    [
+      "^([0-9]+) / ([0-9]+) pages selected$",
+      "已选择 {0} / {1} 页"
+    ],
+    [
+      "^BOM: ([0-9]+) rules enabled; netlist includes all components$",
+      "BOM：已启用 {0} 条规则；网表包含全部器件"
+    ],
+    [
+      "^Property: (.*)$",
+      "属性：{0}"
+    ],
+    [
+      "^Exported ([0-9]+) PDF pages and ([0-9]+) BOM components to three files\\.$",
+      "已导出 {0} 页 PDF、{1} 个 BOM 器件，共三个文件。"
+    ],
+    [
+      "^ BOM excluded: ([0-9]+)\\. Netlist: ([0-9]+) components\\.$",
+      " BOM 排除：{0} 个；网表：{1} 个器件。"
+    ],
+    [
+      "^Could not read ([A-Za-z][A-Za-z0-9_:]*)\\.$",
+      "无法读取 {0}。"
+    ],
+    [
+      "^Saved BOM filters are invalid\\. Open BOM Filters and save the corrected settings: (.*)$",
+      "已保存的 BOM 筛选无效，请打开筛选设置修正后保存。详细信息：{0}"
+    ],
+    [
+      "^Missing BOM filter setting: (.+)$",
+      "缺少 BOM 筛选设置：{0}"
+    ],
+    [
+      "^Missing BOM rule field: (.+)$",
+      "缺少 BOM 规则字段：{0}"
+    ],
+    [
+      "^Could not read BOM filter property '(.*)' \\(Capture error (.+)\\)\\.$",
+      "无法读取 BOM 筛选属性“{0}”（Capture 错误 {1}）。"
+    ],
+    [
+      "^Reference (.+) was not found in the current design\\.$",
+      "当前设计中找不到位号 {0}。"
+    ],
+    [
+      "^Units of (.+) have different colors\\. Choose a reference with one stored color\\.$",
+      "{0} 的不同单元颜色不一致，请换一个颜色一致的参考器件。"
+    ],
+    [
+      "^PostScript printer is unavailable: (.*)\\. Install the OrCAD 17\\.2 PDF printer first\\.$",
+      "PostScript 打印机不可用：{0}。请先安装 OrCAD 17.2 PDF 打印驱动。"
+    ],
+    [
+      "^The Capture 17\\.2 PDF package is incomplete: (.*)\\.$",
+      "Capture 17.2 PDF 组件不完整：{0}。"
+    ],
+    [
+      "^Could not restore PDF settings: (.*)$",
+      "无法恢复 PDF 设置：{0}"
+    ],
+    [
+      "^Capture could not select the design for PDF printing\\. Select the DSN in Project Manager and retry\\. Details: (.*)$",
+      "Capture 无法选中 PDF 打印设计，请在工程管理器中选中 DSN 后重试。详细日志：{0}"
+    ],
+    [
+      "^The PDF print target changed\\. Export stopped\\. Details: (.*)$",
+      "PDF 打印目标已改变，已停止导出。详细日志：{0}"
+    ],
+    [
+      "^Capture did not call the PDF output action\\. Restart Capture, select the DSN in Project Manager and retry\\. Details: (.*)$",
+      "Capture 未调用 PDF 输出动作，请重启 Capture 并在工程管理器中选中 DSN 后重试。详细日志：{0}"
+    ],
+    [
+      "^Capture returned empty PostScript after selecting the design \\((.*)\\)\\. Page callbacks: ([0-9]+)\\. Close any part/property editor, select the DSN in Project Manager, and retry\\. If this continues, test Capture's built-in Export PDF\\. Details: (.*)$",
+      "Capture 选中设计（{0}）后生成的 PostScript 为空，收到 {1} 次页面回调。请关闭器件/属性编辑器，在工程管理器中选中 DSN 后重试；仍失败时请测试 Capture 内置 PDF 导出。详细日志：{2}"
+    ],
+    [
+      "^Capture produced PostScript but no page callbacks\\. PDF pages cannot be matched safely\\. Details: (.*)$",
+      "Capture 生成了 PostScript，但未收到页面回调，无法准确匹配 PDF 页。详细日志：{0}"
+    ],
+    [
+      "^Printer '(.*)' did not produce PostScript\\. Choose a PostScript printer\\. Details: (.*)$",
+      "打印机“{0}”未生成 PostScript，请选择 PostScript 打印机。详细日志：{1}"
+    ],
+    [
+      "^Inconsistent BOM properties across units of (.*)\\.$",
+      "器件 {0} 的不同单元 BOM 属性不一致。"
+    ],
+    [
+      "^BOM is missing netlist components: (.*)$",
+      "BOM 缺少网表中的器件：{0}"
+    ],
+    [
+      "^BOM filter property was not captured for (.*)\\. Restart Capture and export again\\.$",
+      "未捕获器件 {0} 的 BOM 筛选属性，请重启 Capture 后重新导出。"
+    ],
+    [
+      "^Could not read the part color for (.*)\\. No filtered BOM was committed\\.$",
+      "无法读取器件 {0} 的颜色，未提交筛选后的 BOM。"
+    ],
+    [
+      "^(.*) exceeded ([0-9]+) seconds\\. Export stopped\\.$",
+      "{0} 运行超过 {1} 秒，已停止导出。"
+    ],
+    [
+      "^(.*) failed \\((.*)\\)\\. See the diagnostic log\\.$",
+      "{0} 运行失败（{1}），请查看诊断日志。"
+    ],
+    [
+      "^Unsupported PST character: (.*)$",
+      "不支持的 PST 字符：{0}"
+    ],
+    [
+      "^Could not decode (.*)\\. Check the system locale and schematic text\\.$",
+      "无法解码 {0}，请检查系统区域设置和原理图文本。"
+    ],
+    [
+      "^Cadence did not produce (.*)\\. See the diagnostic log\\.$",
+      "Cadence 未生成 {0}，请查看诊断日志。"
+    ],
+    [
+      "^Incorrect FILE_TYPE in (.*)\\.$",
+      "{0} 的 FILE_TYPE 类型错误。"
+    ],
+    [
+      "^Incomplete (.*): missing END\\.$",
+      "{0} 不完整：缺少 END。"
+    ],
+    [
+      "^Duplicate primitive definition: (.*)$",
+      "器件原语定义重复：{0}"
+    ],
+    [
+      "^Unterminated primitive definition: (.*)$",
+      "器件原语定义未结束：{0}"
+    ],
+    [
+      "^Primitive definition has no body: (.*)$",
+      "器件原语定义缺少主体：{0}"
+    ],
+    [
+      "^Duplicate reference: (.*)$",
+      "位号重复：{0}"
+    ],
+    [
+      "^Duplicate net name: (.*)$",
+      "网络名称重复：{0}"
+    ],
+    [
+      "^Net (.*) references unknown component (.*)\\.$",
+      "网络 {0} 引用了未知器件 {1}。"
+    ],
+    [
+      "^Pin (.*) appears on both (.*) and (.*)\\.$",
+      "引脚 {0} 同时出现在网络 {1} 和 {2} 上。"
+    ],
+    [
+      "^(.*) references missing primitive (.*)\\.$",
+      "器件 {0} 引用了缺失的原语 {1}。"
+    ],
+    [
+      "^Missing PCB Footprint for (.*)\\. Fix the schematic\\.$",
+      "器件 {0} 缺少 PCB 封装，请修正原理图。"
+    ],
+    [
+      "^Invalid PADS 2000/V3 (.*): (.*)\\. Fix the schematic; names are never silently changed\\.$",
+      "PADS 2000/V3 的 {0} 不合法：{1}。请修正原理图，插件不会静默修改名称。"
+    ],
+    [
+      "^Unsupported power pin syntax: (.*)$",
+      "不支持的电源引脚语法：{0}"
+    ],
+    [
+      "^Check the power pin mapping: (.*)$",
+      "请检查电源引脚映射：{0}"
+    ],
+    [
+      "^Conflicting implicit power nets for (.*)\\.$",
+      "引脚 {0} 的隐式电源网络冲突。"
+    ],
+    [
+      "^(.*) has POWER_GROUP and unexpanded (.*); power connectivity cannot be inferred\\.$",
+      "器件 {0} 存在 POWER_GROUP 且引脚 {1} 未展开，无法推断电源连接。"
+    ],
+    [
+      "^References differ only in case and conflict in PADS: (.*)$",
+      "位号仅大小写不同，在 PADS 中冲突：{0}"
+    ],
+    [
+      "^Net names differ only in case and conflict in PADS: (.*)$",
+      "网络名称仅大小写不同，在 PADS 中冲突：{0}"
+    ],
+    [
+      "^The export worker stopped unexpectedly: (.*)$",
+      "导出程序意外停止：{0}"
+    ]
+  ]
+}

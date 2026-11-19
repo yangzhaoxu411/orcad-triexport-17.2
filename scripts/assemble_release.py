@@ -8,7 +8,7 @@ import sys
 import zipfile
 
 BASE = Path(__file__).resolve().parents[1]
-NAME = "OrCAD-TriExport-17.2-1.0.0-rc9"
+NAME = "OrCAD-TriExport-17.2-1.0.0-rc10"
 RELEASE = BASE / "release" / NAME
 
 
@@ -32,14 +32,14 @@ def main():
     payload = RELEASE / "payload"
     payload.mkdir()
     (payload / ".triexport-owned").write_text("OrCADTriExport-17.2-owned-v1")
-    for file in ["TriExport.tcl", "BomFilters.tcl", "zzTriExport.tcl"]:
+    for file in ["TriExport.tcl", "BomFilters.tcl", "UiLocale.tcl", "ZhCN.tcl", "zzTriExport.tcl"]:
         copy(BASE / "src" / file, payload / file)
     shutil.copytree(BASE / ".work/dist/TriExportWorker", payload / "bin")
     for name in ["README.md", "README-中文.md", "ENVIRONMENT.md", "CHANGELOG.md", "VALIDATION.md", "LICENSE.txt", "install.cmd", "install.ps1",
                  "uninstall.cmd", "uninstall.ps1", "Installer.Common.ps1", "build.ps1", "requirements-build.txt"]:
         copy(BASE / name, RELEASE / name)
     copy(BASE / "LICENSE.txt", payload / "LICENSE.txt")
-    for pattern, directory in [("*.py", "src"), ("*.tcl", "src"), ("test_*.py", "tests"),
+    for pattern, directory in [("*.py", "src"), ("*.tcl", "src"), ("*.json", "src"), ("test_*.py", "tests"),
                                ("test_*.tcl", "tests"), ("test_*.ps1", "tests"), ("*.py", "scripts")]:
         for path in (BASE / directory).glob(pattern):
             copy(path, RELEASE / directory / path.name)

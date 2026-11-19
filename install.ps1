@@ -37,7 +37,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $stage '.triexport-owned'), $script:ProductMarker)
     Get-ChildItem -LiteralPath $payload -Force | Copy-Item -Destination $stage -Recurse -Force
     [IO.File]::WriteAllText((Join-Path $stage 'install.json'),
-        (@{ version = '1.0.0-rc9'; cadence_root = $cadence; installed_utc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json),
+        (@{ version = '1.0.0-rc10'; cadence_root = $cadence; installed_utc = [DateTime]::UtcNow.ToString('o') } | ConvertTo-Json),
         (New-Object Text.UTF8Encoding($false)))
     # Prove loader-folder write access before replacing the current version.
     Copy-Item -LiteralPath (Join-Path $stage 'zzTriExport.tcl') -Destination $loaderTemp
@@ -68,4 +68,4 @@ try {
     if (Test-Path -LiteralPath $stage) { Remove-OwnedDirectory $stage $parent }
 }
 if (Test-Path -LiteralPath $backup) { Remove-OwnedDirectory $backup $parent }
-Write-Output "Installed TriExport 1.0.0-rc9. Restart Capture 17.2, then choose TriExport > Export Files after Help.`nPlugin: $destination"
+Write-Output "Installed TriExport 1.0.0-rc10. Restart Capture 17.2, then open the Chinese export menu after Help.`nPlugin: $destination"

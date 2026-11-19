@@ -1,6 +1,6 @@
 # 环境要求
 
-适用版本：OrCAD TriExport **1.0.0-rc9**。
+适用版本：OrCAD TriExport **1.0.0-rc10**。
 
 ## 运行安装包
 
@@ -31,7 +31,7 @@ Ghostscript 官方下载：[ghostscript.com/releases/gsdnld.html](https://ghosts
 | Tcl | 8.6.0（Cadence 自带） |
 | 打印驱动 | `OrCADPS_17.2` |
 | Ghostscript | 10.08.0，`gswin64c.exe` |
-| 图纸设置 | Original sheet size |
+| 图纸设置 | 原图纸尺寸（旧版 Original sheet size） |
 | 验证结果 | rc9 通过原生数据库颜色/属性读取及五组双格式 BOM 筛选导出验证；PDF 复用已验证的打印数据，详情见 VALIDATION.md |
 
 EXE 属性未提供更细的 Capture hotfix 编号，不据此推断具体 hotfix。Windows 10、其他驱动名称、A4/A3 强制纸张和其他 Ghostscript 版本尚未完成同等实机验证。

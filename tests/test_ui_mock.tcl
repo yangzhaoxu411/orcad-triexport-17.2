@@ -111,7 +111,7 @@ proc RefreshMenu {} {}
 ::TriExport::init [file join $scratch mock-cadence]
 check {!$tkLoaded} "autoload does not create windows"
 foreach menu $menus {
-    check {![regexp {[^\x00-\x7f]} $menu]} "native menu labels are ASCII"
+    check {[regexp {[\u4e00-\u9fff]} $menu]} "native menu labels are Chinese Unicode"
 }
 set popup [lindex $menus 0 3]
 check {[lindex $popup 3] eq "TriExportEnable"} "opening popup does not invoke export dialog"
@@ -120,8 +120,8 @@ set callback [dict get $actions $run]
 check {$callback eq "::TriExport::openAction"} "menu child is wired to the open action"
 set result [$callback]
 check {$result eq "true" && [winfo exists .triExport.bottom.export]} "menu callback builds a complete dialog"
-check {[string match {Netlist*} [dict get $widgets .triExport.top.title options -text]]} "heading supports either netlist format"
-check {[string match {*Unzip*Allegro*} $::TriExport::formatNote]} "default UI explains netlist ZIP extraction"
+check {[string match "\u7f51\u8868*" [dict get $widgets .triExport.top.title options -text]]} "heading supports either netlist format"
+check {[string match "*Allegro*\u89e3\u538b*" $::TriExport::formatNote]} "default UI explains netlist ZIP extraction"
 set formatOptions [dict get $widgets .triExport.format.choice options]
 check {[dict get $formatOptions -state] eq "readonly"} "format choices cannot be typed arbitrarily"
 check {[dict get $formatOptions -values] eq {{Allegro (ZIP)} {PADS PowerPCB V3 (ASC)}}} "both output formats are available"
@@ -141,7 +141,7 @@ check {[dict get $widgets .triExport.format.choice lastState] eq "disabled"} "fo
 check {[dict get $widgets .triExport.format.choice lastState] eq "!disabled"} "format control restored after export"
 set ::TriExport::netlistFormat "Allegro (ZIP)"
 eval $formatCallback
-check {[string match {*Unzip*Allegro*} $::TriExport::formatNote]} "switching back restores ZIP guidance"
+check {[string match "*Allegro*\u89e3\u538b*" $::TriExport::formatNote]} "switching back restores ZIP guidance"
 set ::TriExport::netlistFormat "PADS PowerPCB V3 (ASC)"
 ::TriExport::loadSettings
 check {[::TriExport::netlistFormatId] eq "allegro-pst"} "Allegro choice survives loading saved settings"
@@ -149,17 +149,39 @@ check {$tkLoads == 1} "Tk loaded before window commands"
 check {[lsearch -exact $calls {wm withdraw .}] >= 0} "only newly loaded Tk root is hidden"
 set options [dict get $widgets .triExport.options.paper options]
 set values [dict get $options -values]
-check {[llength $values] == 3 && [lindex $values 0] eq "Original sheet size"} "paper labels remain three choices"
-check {$::TriExport::selectedCount eq "3 / 3 pages selected"} "page selection initialized"
+check {[llength $values] == 3 && [lindex $values 0] eq "\u539f\u56fe\u7eb8\u5c3a\u5bf8"} "paper labels remain three choices"
+check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 3 / 3 \u9875"} "page selection initialized"
 set clear [dict get [dict get $widgets .triExport.pageTools.none options] -command]
 eval $clear
-check {$::TriExport::selectedCount eq "0 / 3 pages selected"} "clear all button works"
+check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 0 / 3 \u9875"} "clear all button works"
 set all [dict get [dict get $widgets .triExport.pageTools.all options] -command]
 eval $all
-check {$::TriExport::selectedCount eq "3 / 3 pages selected"} "select all button works"
+check {$::TriExport::selectedCount eq "\u5df2\u9009\u62e9 3 / 3 \u9875"} "select all button works"
 set openBom [dict get $widgets .triExport.bom.settings options -command]
 eval $openBom
 check {[winfo exists .triExport.bomFilters.rules]} "BOM settings opens a rule editor"
+
+check {$::TriExport::ui_bomAction eq "\u6392\u9664"} "BOM action initially shows Chinese"
+set ::TriExport::ui_bomAction "\u7eb3\u5165"
+check {$::TriExport::bomAction eq "include"} "Chinese include selection uses stable ID"
+set ::TriExport::ui_bomOperator "\u901a\u914d\u5339\u914d"
+check {$::TriExport::bomOperator eq "glob"} "Chinese wildcard choice uses stable operator"
+set ::TriExport::ui_bomIncludeMatch "\u5168\u90e8\u6ee1\u8db3"
+check {$::TriExport::bomIncludeMatch eq "all"} "Chinese all selection uses stable match mode"
+set ::TriExport::bomAction exclude
+check {$::TriExport::ui_bomAction eq "\u6392\u9664"} "programmatic reset refreshes Chinese display"
+set ::TriExport::ui_bomField "\u81ea\u5b9a\u4e49\u5c5e\u6027"
+check {$::TriExport::bomField eq "Custom property"} "Chinese field resolves to existing field mapping"
+set ::TriExport::ui_paper "A4 \u6a2a\u5411"
+check {$::TriExport::paper eq "A4 landscape"} "Chinese paper choice preserves print backend value"
+::TriExport::saveSettings
+set savedSettings [::json::json2dict [::TriExport::readUtf8 [file join $scratch settings.json]]]
+check {[dict get $savedSettings paper] eq "A4 landscape"} "paper persists in backward-compatible format"
+set ::TriExport::paper "Original sheet size"
+::TriExport::loadSettings
+check {$::TriExport::ui_paper eq "A4 \u6a2a\u5411"} "loading legacy paper value restores Chinese display"
+set ::TriExport::paper "Original sheet size"
+
 set ::TriExport::bomField "DNP / DNI"
 set ::TriExport::bomOperator equals
 set ::TriExport::bomValue YES
@@ -179,7 +201,7 @@ set ::TriExport::bomValue {Not fitted}
 eval [dict get $widgets .triExport.bomFilters.actions.add options -command]
 eval [dict get $widgets .triExport.bomFilters.bottom.save options -command]
 check {[dict get $::TriExport::bomFilter enabled] && [llength [dict get $::TriExport::bomFilter rules]] == 1} "Save applies BOM rules"
-check {[string match {*1 rules enabled*} $::TriExport::bomSummary]} "main panel shows active filtering"
+check {[string match "*1 \u6761\u89c4\u5219*" $::TriExport::bomSummary]} "main panel shows active filtering"
 set ::TriExport::bomFilter [::TriExport::defaultBomFilter]
 ::TriExport::loadSettings
 check {[dict get [lindex [dict get $::TriExport::bomFilter rules] 0] property] eq "Assembly Status"} "custom rule persists through settings reload"
@@ -190,13 +212,13 @@ eval [dict get $widgets .triExport.bomFilters.actions.remove options -command]
 check {[llength $::TriExport::bomRules] == 0} "Remove deletes the selected rule"
 set ::TriExport::bomEnabled 0
 eval [dict get $widgets .triExport.bomFilters.bottom.save options -command]
-check {$::TriExport::bomSummary eq "BOM: all components"} "disabling rules restores all-components summary"
+check {$::TriExport::bomSummary eq "BOM\uff1a\u5bfc\u51fa\u5168\u90e8\u5668\u4ef6"} "disabling rules restores all-components summary"
 set before [dict size $widgets]
 dict for {path item} $widgets {
     set options [dict get $item options]
     foreach key {-text -values} {
         if {[dict exists $options $key]} {
-            check {![regexp {[^\x00-\x7f]} [dict get $options $key]]} "all static UI labels are ASCII"
+            check {![string match {*\ufffd*} [dict get $options $key]]} "UI text contains no replacement characters"
         }
     }
 }

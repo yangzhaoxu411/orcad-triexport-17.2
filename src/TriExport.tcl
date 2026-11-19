@@ -1,7 +1,7 @@
-# OrCAD Capture 17.2 TriExport. ASCII UI; user data remains UTF-8.
+# OrCAD Capture 17.2 TriExport. Chinese UI; user data remains UTF-8.
 # Entry points use the documented Capture Tcl API; no window automation.
 namespace eval ::TriExport {
-    variable version "1.0.0-rc9"
+    variable version "1.0.0-rc10"
     variable home [file dirname [file normalize [info script]]]
     variable cadenceRoot ""
     variable registered 0
@@ -26,6 +26,8 @@ namespace eval ::TriExport {
     variable pdfCallbackError ""
 }
 source -encoding utf-8 [file join $::TriExport::home BomFilters.tcl]
+source -encoding utf-8 [file join $::TriExport::home UiLocale.tcl]
+set ::TriExport::statusText [::TriExport::tr $::TriExport::statusText]
 
 proc ::TriExport::readUtf8 {path} {
     set f [open $path r]
@@ -130,9 +132,9 @@ proc ::TriExport::netlistFormatId {} {
 proc ::TriExport::updateFormatNote {} {
     variable formatNote
     if {[netlistFormatId] eq "allegro-pst"} {
-        set formatNote "Output: Allegro netlist ZIP, PDF and BOM CSV. Unzip the netlist before importing into Allegro. Page selection applies to PDF only."
+        set formatNote [tr "Output: Allegro netlist ZIP, PDF and BOM CSV. Unzip the netlist before importing into Allegro. Page selection applies to PDF only."]
     } else {
-        set formatNote "Output: PADS PowerPCB V3 ASC, PDF and BOM CSV. PADS naming and power-mapping limits apply. Page selection applies to PDF only."
+        set formatNote [tr "Output: PADS PowerPCB V3 ASC, PDF and BOM CSV. PADS naming and power-mapping limits apply. Page selection applies to PDF only."]
     }
 }
 proc ::TriExport::formatChanged {} {
@@ -487,13 +489,13 @@ proc ::TriExport::renderPostscript {spool design} {
 proc ::TriExport::chooseRoot {} {
     variable root
     variable win
-    set chosen [tk_chooseDirectory -parent $win -title "Choose output root folder" -mustexist 1]
+    set chosen [tk_chooseDirectory -parent $win -title [tr "Choose output root folder"] -mustexist 1]
     if {$chosen ne ""} { set root $chosen }
 }
 proc ::TriExport::chooseGs {} {
     variable ghostscript
     variable win
-    set chosen [tk_getOpenFile -parent $win -title "Select gswin64c.exe or gswin32c.exe" \
+    set chosen [tk_getOpenFile -parent $win -title [tr "Select gswin64c.exe or gswin32c.exe"] \
         -filetypes {{{Ghostscript} {.exe}}}]
     if {$chosen ne ""} { set ghostscript $chosen }
 }
@@ -503,7 +505,7 @@ proc ::TriExport::countSelected {} {
     variable selectedCount
     set n 0
     foreach key [array names checked] { if {$checked($key)} { incr n } }
-    set selectedCount "$n / [llength $pages] pages selected"
+    set selectedCount [tr "$n / [llength $pages] pages selected"]
 }
 proc ::TriExport::selectAll {value} {
     variable checked
@@ -539,7 +541,7 @@ proc ::TriExport::refreshPages {} {
 }
 proc ::TriExport::refreshAction {} {
     variable win
-    if {[catch {refreshPages} err]} { tk_messageBox -parent $win -icon error -message $err }
+    if {[catch {refreshPages} err]} { showMessage -parent $win -icon error -message [displayError $err] }
 }
 proc ::TriExport::sizeCanvas {} {
     variable win
@@ -588,7 +590,7 @@ proc ::TriExport::reportError {context message options} {
     # If Tk itself failed to load, do not mask the original error with another
     # call to an unavailable Tk command. Session Log and the file retain it.
     if {[llength [info commands ::tk_messageBox]]} {
-        catch {::tk_messageBox -title "TriExport" -icon error -message "$context\n\n$message\n\nSee startup-error.log in LocalAppData/OrCADTriExport/data-17.2."}
+        catch {showMessage -title "TriExport" -icon error -message "[tr $context]\n\n[displayError $message]\n\n[tr {See startup-error.log in LocalAppData/OrCADTriExport/data-17.2.}]"}
     }
 }
 proc ::TriExport::show {args} {
@@ -613,27 +615,27 @@ proc ::TriExport::buildDialog {} {
     updateBomSummary
     if {$ghostscript eq ""} { set ghostscript [findGhostscript] }
     toplevel $win
-    wm title $win "TriExport $::TriExport::version - OrCAD 17.2"
+    wm title $win [tr "TriExport $::TriExport::version - OrCAD 17.2"]
     wm geometry $win 760x720
     wm minsize $win 620 560
     wm protocol $win WM_DELETE_WINDOW ::TriExport::closeWindow
     ttk::frame $win.top -padding 14
     pack $win.top -side top -fill x
-    ttk::label $win.top.title -text "Netlist  /  Schematic PDF  /  BOM" -font {"Segoe UI" 14 bold}
+    ttk::label $win.top.title -text [tr "Netlist  /  Schematic PDF  /  BOM"] -font {"Microsoft YaHei UI" 14 bold}
     ttk::label $win.top.design -textvariable ::TriExport::designPath -wraplength 690
     pack $win.top.title $win.top.design -anchor w -pady 4
     ttk::frame $win.location -padding {14 0 14 8}
     pack $win.location -fill x
-    ttk::label $win.location.label -text "Output root folder"
+    ttk::label $win.location.label -text [tr "Output root folder"]
     ttk::entry $win.location.path -textvariable ::TriExport::root
-    ttk::button $win.location.browse -text "Browse..." -command ::TriExport::chooseRoot
+    ttk::button $win.location.browse -text [tr "Browse..."] -command ::TriExport::chooseRoot
     grid $win.location.label -row 0 -column 0 -padx {0 10}
     grid $win.location.path -row 0 -column 1 -sticky ew
     grid $win.location.browse -row 0 -column 2 -padx {8 0}
     grid columnconfigure $win.location 1 -weight 1
     ttk::frame $win.format -padding {14 0 14 8}
     pack $win.format -fill x
-    ttk::label $win.format.label -text "Netlist format"
+    ttk::label $win.format.label -text [tr "Netlist format"]
     ttk::combobox $win.format.choice -textvariable ::TriExport::netlistFormat -state readonly \
         -values {{Allegro (ZIP)} {PADS PowerPCB V3 (ASC)}} -width 30
     bind $win.format.choice <<ComboboxSelected>> ::TriExport::formatChanged
@@ -641,17 +643,17 @@ proc ::TriExport::buildDialog {} {
     pack $win.format.choice -side left -fill x -expand 1
     ttk::frame $win.bom -padding {14 0 14 8}
     pack $win.bom -fill x
-    ttk::button $win.bom.settings -text "BOM Filters..." -command ::TriExport::showBomFilters
+    ttk::button $win.bom.settings -text [tr "BOM Filters..."] -command ::TriExport::showBomFilters
     ttk::label $win.bom.summary -textvariable ::TriExport::bomSummary -wraplength 530
     pack $win.bom.settings -side left -padx {0 10}
     pack $win.bom.summary -side left -fill x -expand 1
     ttk::frame $win.pageTools -padding {14 4}
     pack $win.pageTools -fill x
-    ttk::label $win.pageTools.label -text "PDF pages (multiple selection)"
+    ttk::label $win.pageTools.label -text [tr "PDF pages (multiple selection)"]
     ttk::label $win.pageTools.count -textvariable ::TriExport::selectedCount
-    ttk::button $win.pageTools.all -text "Select all" -command {::TriExport::selectAll 1}
-    ttk::button $win.pageTools.none -text "Clear all" -command {::TriExport::selectAll 0}
-    ttk::button $win.pageTools.refresh -text "Refresh" -command ::TriExport::refreshAction
+    ttk::button $win.pageTools.all -text [tr "Select all"] -command {::TriExport::selectAll 1}
+    ttk::button $win.pageTools.none -text [tr "Clear all"] -command {::TriExport::selectAll 0}
+    ttk::button $win.pageTools.refresh -text [tr "Refresh"] -command ::TriExport::refreshAction
     pack $win.pageTools.label $win.pageTools.count -side left -padx {0 10}
     pack $win.pageTools.refresh $win.pageTools.none $win.pageTools.all -side right -padx 3
     ttk::frame $win.pageList -padding {14 0 14 0}
@@ -667,15 +669,15 @@ proc ::TriExport::buildDialog {} {
     pack $win.pageList.canvas -side left -fill both -expand 1
     ttk::frame $win.options -padding 14
     pack $win.options -fill x
-    ttk::label $win.options.gsLabel -text "Ghostscript"
+    ttk::label $win.options.gsLabel -text [tr "Ghostscript"]
     ttk::entry $win.options.gs -textvariable ::TriExport::ghostscript
-    ttk::button $win.options.gsBrowse -text "Browse..." -command ::TriExport::chooseGs
+    ttk::button $win.options.gsBrowse -text [tr "Browse..."] -command ::TriExport::chooseGs
     grid $win.options.gsLabel -row 0 -column 0 -sticky w -padx {0 10}
     grid $win.options.gs -row 0 -column 1 -sticky ew
     grid $win.options.gsBrowse -row 0 -column 2 -padx {8 0}
-    ttk::label $win.options.driverLabel -text "PDF print driver"
+    ttk::label $win.options.driverLabel -text [tr "PDF print driver"]
     ttk::entry $win.options.driver -textvariable ::TriExport::driver
-    ttk::combobox $win.options.paper -textvariable ::TriExport::paper -state readonly \
+    localizedChoice $win.options.paper -textvariable ::TriExport::paper -state readonly \
         -values {{Original sheet size} {A4 landscape} {A3 landscape}} -width 19
     grid $win.options.driverLabel -row 1 -column 0 -sticky w -pady 8
     grid $win.options.driver -row 1 -column 1 -sticky ew -pady 8
@@ -686,8 +688,8 @@ proc ::TriExport::buildDialog {} {
     ttk::frame $win.bottom -padding {14 0 14 14}
     pack $win.bottom -fill x
     ttk::label $win.bottom.status -textvariable ::TriExport::statusText -wraplength 530
-    ttk::button $win.bottom.export -text "Export Files" -command ::TriExport::start
-    ttk::button $win.bottom.close -text "Close" -command ::TriExport::closeWindow
+    ttk::button $win.bottom.export -text [tr "Export Files"] -command ::TriExport::start
+    ttk::button $win.bottom.close -text [tr "Close"] -command ::TriExport::closeWindow
     pack $win.bottom.close $win.bottom.export -side right -padx 4
     pack $win.bottom.status -side left -fill x -expand 1
     refreshAction
@@ -700,18 +702,19 @@ proc ::TriExport::start {} {
     if {$busy} { return }
     set busy 1
     setControls $win 1
-    set statusText "Checking the design and export dependencies..."
+    set statusText [tr "Checking the design and export dependencies..."]
     update idletasks
     if {[catch {prepareJob} err opts]} {
         set busy 0
         setControls $win 0
-        set statusText "Export did not complete: $err"
+        set statusText "[tr {Export did not complete:}] [displayError $err]"
+        set err [displayError $err]
         variable jobDir
         if {$jobDir ne "" && [file isdirectory $jobDir]} {
             catch {writeUtf8 [file join $jobDir capture-error.log] [dict get $opts -errorinfo]}
-            append err "\n\nDiagnostics: $jobDir"
+            append err "\n\n[tr {Diagnostics:}] $jobDir"
         }
-        tk_messageBox -parent $win -title "Export Files" -icon error -message $err
+        showMessage -parent $win -title "Export Files" -icon error -message $err
     }
 }
 proc ::TriExport::prepareJob {} {
@@ -758,10 +761,10 @@ proc ::TriExport::prepareJob {} {
     exec $worker hash $path --output $hashPath
     set hash [string trim [readUtf8 $hashPath]]
     if {![regexp {^[0-9a-f]{64}$} $hash]} { error "Could not verify the design file revision." }
-    set statusText "Reading the BOM for the full design..."
+    set statusText [tr "Reading the BOM for the full design..."]
     update idletasks
     set bom [enumerateBom $d $filter]
-    set statusText "Printing schematics to PostScript. Please wait..."
+    set statusText [tr "Printing schematics to PostScript. Please wait..."]
     update idletasks
     set ps [renderPostscript [file join $jobDir spool] $path]
     assertSaved $d
@@ -773,7 +776,7 @@ proc ::TriExport::prepareJob {} {
     set workerChannel [open [list | $worker run $manifest 2>@1] r]
     fconfigure $workerChannel -blocking 0 -encoding utf-8
     fileevent $workerChannel readable ::TriExport::workerReadable
-    set statusText "Generating the netlist, PDF and BOM..."
+    set statusText [tr "Generating the netlist, PDF and BOM..."]
     after 500 ::TriExport::poll
 }
 proc ::TriExport::workerReadable {} {
@@ -808,26 +811,26 @@ proc ::TriExport::poll {} {
     variable workerChannel
     if {![winfo exists $win]} { return }
     set statusFile [file join $jobDir status.txt]
-    if {[file exists $statusFile]} { catch {set statusText [readUtf8 $statusFile]} }
+    if {[file exists $statusFile]} { catch {set statusText [tr [readUtf8 $statusFile]]} }
     set resultPath [file join $jobDir result.json]
     if {![file exists $resultPath] || $workerChannel ne ""} { after 500 ::TriExport::poll; return }
     set busy 0
     setControls $win 0
     if {[catch {set r [::json::json2dict [readUtf8 $resultPath]]} err]} {
-        set statusText "Could not read the export result: $err"
+        set statusText "[tr {Could not read the export result:}] [displayError $err]"
         return
     }
     if {[dict get $r ok]} {
-        set statusText "Exported [dict get $r pages] PDF pages and [dict get $r parts] BOM components to three files."
+        set statusText [tr "Exported [dict get $r pages] PDF pages and [dict get $r parts] BOM components to three files."]
         if {[dict exists $r bom_excluded]} {
-            append statusText " BOM excluded: [dict get $r bom_excluded]. Netlist: [dict get $r netlist_parts] components."
+            append statusText [tr " BOM excluded: [dict get $r bom_excluded]. Netlist: [dict get $r netlist_parts] components."]
         }
-        tk_messageBox -parent $win -title "Export complete" -icon info \
+        showMessage -parent $win -title "Export complete" -icon info \
             -message "$statusText\n\n[dict get $r output]"
     } else {
-        set statusText "Export failed. No results were committed."
-        tk_messageBox -parent $win -title "Export failed" -icon error \
-            -message "[dict get $r error]\n\nLog: [dict get $r log]"
+        set statusText [tr "Export failed. No results were committed."]
+        showMessage -parent $win -title "Export failed" -icon error \
+            -message "[displayError [dict get $r error]]\n\n[tr {Log:}] [dict get $r log]"
     }
 }
 proc ::TriExport::enabled {args} { return true }
@@ -843,9 +846,9 @@ proc ::TriExport::init {rootPath} {
     RegisterAction "TriExportOpen" "::TriExport::enabled" "" "::TriExport::openAction" ""
     RegisterAction "TriExportEnable" "::TriExport::enabled" "" "::TriExport::enabled" ""
     InsertXMLMenu [list [list "TriExportMenu"] "1" "Help" \
-        [list "popup" "TriE&xport" "0" "TriExportEnable" "TriExportEnable" "" ""] ""]
+        [list "popup" [tr "TriE&xport"] "0" "TriExportEnable" "TriExportEnable" "" ""] ""]
     InsertXMLMenu [list [list "TriExportMenu" "TriExportRun"] "" "" \
-        [list "action" "Export Files..." "0" "TriExportOpen" "TriExportEnable" "" "" "" "Select pages and export netlist, PDF and BOM"] ""]
+        [list "action" [tr "Export Files..."] "0" "TriExportOpen" "TriExportEnable" "" "" "" [tr "Select pages and export netlist, PDF and BOM"]] ""]
     RefreshMenu
     set registered 1
 }

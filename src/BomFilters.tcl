@@ -118,11 +118,11 @@ proc ::TriExport::updateBomSummary {} {
     variable bomFilter
     variable bomFilterLoadError
     variable bomSummary
-    if {$bomFilterLoadError ne ""} { set bomSummary "BOM: settings need correction"; return }
+    if {$bomFilterLoadError ne ""} { set bomSummary [tr "BOM: settings need correction"]; return }
     if {![dict get $bomFilter enabled] || ![llength [dict get $bomFilter rules]]} {
-        set bomSummary "BOM: all components"
+        set bomSummary [tr "BOM: all components"]
     } else {
-        set bomSummary "BOM: [llength [dict get $bomFilter rules]] rules enabled; netlist includes all components"
+        set bomSummary [tr "BOM: [llength [dict get $bomFilter rules]] rules enabled; netlist includes all components"]
     }
 }
 proc ::TriExport::bomDraft {} {
@@ -131,16 +131,16 @@ proc ::TriExport::bomDraft {} {
 }
 proc ::TriExport::bomRuleLabel {rule} {
     variable bomFields
-    if {[dict get $rule field] eq "property"} { return "Property: [dict get $rule property]" }
-    dict for {label id} $bomFields { if {$id eq [dict get $rule field]} { return $label } }
+    if {[dict get $rule field] eq "property"} { return [tr "Property: [dict get $rule property]"] }
+    dict for {label id} $bomFields { if {$id eq [dict get $rule field]} { return [tr $label] } }
 }
 proc ::TriExport::refreshBomRuleList {} {
     set tree $::TriExport::win.bomFilters.rules
     foreach child [$tree children {}] { $tree delete $child }
     set index 0
     foreach rule $::TriExport::bomRules {
-        $tree insert {} end -id r$index -values [list [dict get $rule action] [bomRuleLabel $rule] \
-            [dict get $rule op] [dict get $rule value]]
+        $tree insert {} end -id r$index -values [list [tr [dict get $rule action]] [bomRuleLabel $rule] \
+            [tr [dict get $rule op]] [dict get $rule value]]
         incr index
     }
 }
@@ -235,7 +235,7 @@ proc ::TriExport::closeBomFilters {} {
 proc ::TriExport::bomEditorAction {command args} {
     if {$::TriExport::busy} { return }
     if {[catch {$command {*}$args} message]} {
-        tk_messageBox -parent $::TriExport::win.bomFilters -title "BOM Filters" -icon error -message $message
+        showMessage -parent $::TriExport::win.bomFilters -title "BOM Filters" -icon error -message [displayError $message]
     }
 }
 proc ::TriExport::showBomFilters {} {
@@ -247,22 +247,22 @@ proc ::TriExport::showBomFilters {} {
     set ::TriExport::bomRules [dict get $::TriExport::bomFilter rules]
     resetBomRule
     toplevel $w
-    wm title $w "BOM Filters - TriExport"
+    wm title $w [tr "BOM Filters - TriExport"]
     wm transient $w $::TriExport::win
     wm geometry $w 850x610
     wm minsize $w 750 580
     wm protocol $w WM_DELETE_WINDOW ::TriExport::closeBomFilters
     ttk::frame $w.top -padding 12
     pack $w.top -fill x
-    ttk::checkbutton $w.top.enabled -text "Enable BOM filters" -variable ::TriExport::bomEnabled
-    ttk::label $w.top.matchLabel -text "Include rules match"
-    ttk::combobox $w.top.match -textvariable ::TriExport::bomIncludeMatch -state readonly -values {any all} -width 7
+    ttk::checkbutton $w.top.enabled -text [tr "Enable BOM filters"] -variable ::TriExport::bomEnabled
+    ttk::label $w.top.matchLabel -text [tr "Include rules match"]
+    localizedChoice $w.top.match -textvariable ::TriExport::bomIncludeMatch -state readonly -values {any all} -width 12
     pack $w.top.enabled $w.top.matchLabel $w.top.match -side left -padx {0 14}
-    ttk::label $w.help -text "Exclusions always win. No include rules = include all. Text matches ignore case and outer spaces.\nRules match any unit of a physical component. Filtering affects BOM only; netlist and PDF are unchanged." -wraplength 800
+    ttk::label $w.help -text [tr "Exclusions always win. No include rules = include all. Text matches ignore case and outer spaces.\nRules match any unit of a physical component. Filtering affects BOM only; netlist and PDF are unchanged."] -wraplength 800
     pack $w.help -anchor w -padx 12 -pady {0 8}
     ttk::treeview $w.rules -columns {action field op value} -show headings -selectmode browse -height 7
     foreach {id title width} {action Action 80 field Field 180 op Operator 120 value Value 340} {
-        $w.rules heading $id -text $title
+        $w.rules heading $id -text [tr $title]
         $w.rules column $id -width $width -minwidth 60
     }
     bind $w.rules <<TreeviewSelect>> ::TriExport::selectBomRule
@@ -276,14 +276,14 @@ proc ::TriExport::showBomFilters {} {
         op Operator bomOperator {equals not_equals contains not_contains glob is_empty not_empty}
     } {
         if {$name eq "field"} { set values [dict keys $::TriExport::bomFields] }
-        ttk::label $w.edit.${name}Label -text $label
-        ttk::combobox $w.edit.$name -textvariable ::TriExport::$variable -state readonly -values $values
+        ttk::label $w.edit.${name}Label -text [tr $label]
+        localizedChoice $w.edit.$name -textvariable ::TriExport::$variable -state readonly -values $values
         grid $w.edit.${name}Label -row $row -column 0 -sticky w -padx {0 10} -pady 2
         grid $w.edit.$name -row $row -column 1 -sticky ew -pady 2
         incr row
     }
     foreach {name label variable} {property {Custom property name} bomProperty value {Value / wildcard pattern} bomValue} {
-        ttk::label $w.edit.${name}Label -text $label
+        ttk::label $w.edit.${name}Label -text [tr $label]
         ttk::entry $w.edit.$name -textvariable ::TriExport::$variable
         grid $w.edit.${name}Label -row $row -column 0 -sticky w -padx {0 10} -pady 2
         grid $w.edit.$name -row $row -column 1 -sticky ew -pady 2
@@ -293,21 +293,21 @@ proc ::TriExport::showBomFilters {} {
     ttk::frame $w.actions -padding {12 0 12 8}
     pack $w.actions -fill x
     foreach {name label command} {add {Add rule} {::TriExport::storeBomRule 0} update {Update selected} {::TriExport::storeBomRule 1} remove {Remove selected} {::TriExport::removeBomRule} new {Clear input} {::TriExport::resetBomRule}} {
-        ttk::button $w.actions.$name -text $label -command [list ::TriExport::bomEditorAction {*}$command]
+        ttk::button $w.actions.$name -text [tr $label] -command [list ::TriExport::bomEditorAction {*}$command]
         pack $w.actions.$name -side left -padx {0 8}
     }
     ttk::frame $w.color -padding {12 0 12 8}
     pack $w.color -fill x
-    ttk::label $w.color.label -text "Color sample reference"
+    ttk::label $w.color.label -text [tr "Color sample reference"]
     ttk::entry $w.color.ref -textvariable ::TriExport::bomSampleRef -width 14
-    ttk::button $w.color.read -text "Read color" -command {::TriExport::bomEditorAction ::TriExport::readBomSampleColor}
+    ttk::button $w.color.read -text [tr "Read color"] -command {::TriExport::bomEditorAction ::TriExport::readBomSampleColor}
     pack $w.color.label $w.color.ref $w.color.read -side left -padx {0 8}
-    ttk::label $w.colorHelp -text "Part color uses Capture's stored color ID. Enter a same-color reference and click Read color, then Add rule.\nSelection highlights, pin/text colors and a custom Color property are separate from the part color." -wraplength 800
+    ttk::label $w.colorHelp -text [tr "Part color uses Capture's stored color ID. Enter a same-color reference and click Read color, then Add rule.\nSelection highlights, pin/text colors and a custom Color property are separate from the part color."] -wraplength 800
     pack $w.colorHelp -anchor w -padx 12
     ttk::frame $w.bottom -padding 12
     pack $w.bottom -fill x
-    ttk::button $w.bottom.cancel -text "Cancel" -command ::TriExport::closeBomFilters
-    ttk::button $w.bottom.save -text "Save filters" -command {::TriExport::bomEditorAction ::TriExport::applyBomFilters}
+    ttk::button $w.bottom.cancel -text [tr "Cancel"] -command ::TriExport::closeBomFilters
+    ttk::button $w.bottom.save -text [tr "Save filters"] -command {::TriExport::bomEditorAction ::TriExport::applyBomFilters}
     pack $w.bottom.cancel $w.bottom.save -side right -padx 4
     refreshBomRuleList
 }
